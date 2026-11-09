@@ -1,65 +1,23 @@
-# AI Interactive Character Photo Booth — P0-1
+# AI 互動角色合照 · P0-2
 
-A responsive camera foundation for the v1.4 interactive character photo booth. **No face recognition, 3D character, gesture recognition, cloud upload, or Supabase is included yet.** Camera frames stay in the browser.
+以 P0-1 main 的 `6203978` 為基礎。保留原有攝影機、解析度、鏡像、全螢幕、除錯資訊、三語介面及本機設定。影像在瀏覽器內處理。
 
-## Requirements
+## 使用
 
-- Node.js 20.19+ or 22+
-- npm
-- A camera and browser with `getUserMedia` support
-- HTTPS or `localhost` for camera permissions
+使用 Node.js 22.13+ 或 24 與 npm。在專案目錄執行：
 
-## Run locally
-
-```bash
-npm install
-npm run dev
-```
-
-Open `http://localhost:5173` on the same computer. Click **開始展示 / Start exhibit** to request camera access.
-
-For a phone/tablet, deploy to GitHub Pages (HTTPS). Opening a LAN HTTP address from another device may not allow camera access.
-
-## Production build
-
-```bash
+```sh
+npm ci
+npm test
 npm run build
 npm run preview
 ```
 
-## GitHub Pages
+開啟 localhost 下的 `/ai-character-photo-booth/`，按「開始展示」。詳見 [逐步部署與實機驗收表](docs/p0-2-acceptance.md)。
 
-1. Create a GitHub repository and upload all project files, including `.github/workflows/deploy.yml`.
-2. Use the `main` branch.
-3. In repository **Settings → Pages → Build and deployment**, select **GitHub Actions**.
-4. Push to `main` or run the workflow manually.
-5. Visit `https://YOUR_USERNAME.github.io/YOUR_REPOSITORY/`.
+## 變更
 
-The workflow sets `GITHUB_PAGES_BASE` to `/<repository>/`, so Vite's asset paths work under project Pages. For custom domains or a user/organization root site, adjust `base` accordingly.
-
-## Features
-
-- Responsive mobile/tablet/desktop layout
-- Start/stop camera with browser permission prompt
-- Camera device selector (labels may only appear after permission)
-- Automatic 720p preference, or manual 640×480 / 1280×720 / 1920×1080 preferences
-- Mirror preview switch (display only)
-- Chinese (Traditional), English, Japanese
-- Debug panel with camera status, selected track settings, viewport and approximate animation FPS
-- LocalStorage settings persistence
-- Camera disconnection and permission error handling
-- Optional fullscreen
-
-**Important:** The FPS shown is `requestAnimationFrame` loop FPS, not a measured camera capture or MediaPipe inference FPS. The camera may choose a different resolution from the requested preference.
-
-## Verification
-
-See [docs/test-plan.md](docs/test-plan.md) for manual acceptance tests and [docs/architecture.md](docs/architecture.md) for architecture boundaries.
-
-## P0-2 handoff
-
-The camera utility is in `src/camera.ts`, UI translations in `src/i18n.ts`, and settings validation in `src/settings.ts`. Future P0 stages can add `src/modules/character`, `src/modules/face-tracking`, and `src/contracts` without cloud dependencies.
-
-## Build verification status
-
-The project files have been generated, but dependencies could not be downloaded in the current environment. The production build and browser-camera tests have **not** been executed here. Run `npm install` and `npm run build` on your machine or GitHub Actions to verify.
+- Three.js 在預覽左下角繪製透明背景的V15 北商大博士小菁鷹，雙眼具有獨立旋轉中心及眨眼動作。開啟展示後可測試待機、追蹤及比 YA 拍照姿勢（約 6 秒）。
+- MediaPipe Face Detector 讀取既有攝影機串流。按方框面積選目標，利用約 250 ms 的切換等待、450 ms 的失焦寬限及時間加權插值平滑視線。
+- DebugPanel 顯示偵測器、3D 角色、臉數、目標中心、推論頻率、耗時與動作。模型與 WASM 隨網站發布。
+- 模型使用 [官方 BlazeFace short-range float16 v1](https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite)，SHA-256 為 `b4578f35940bf5a1a655214a1cce5cab13eba73c1297cd78e1a04c2380b0152f`。
