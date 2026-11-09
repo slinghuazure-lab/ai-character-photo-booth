@@ -1,81 +1,131 @@
 import {useEffect,useRef,type RefObject} from 'react';
 import * as THREE from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {eyeRotation,type Point} from './tracking';
 
 export type Cue='photo'|'left'|'right';
-type Props={gaze:RefObject<Point>; mirror:boolean; cue:{kind:Cue;at:number}; onState:(value:'ready'|'error')=>void};
+type Props={gaze:RefObject<Point>; tracking:boolean; mirror:boolean; cue:{kind:Cue;at:number}; onState:(value:'ready'|'error')=>void};
+const modelUrl=import.meta.env.BASE_URL+'models/NTUB_Doctoral_Owl_6_Actions.glb';
+
+function releaseModel(root:THREE.Object3D) {
+  const textures=new Set<THREE.Texture>();
+  root.traverse(node=>{
+    if(!(node instanceof THREE.Mesh))return;
+    node.geometry.dispose();
+    if(node instanceof THREE.SkinnedMesh)node.skeleton.dispose();
+    for(const material of Array.isArray(node.material)?node.material:[node.material]){
+      for(const value of Object.values(material))if(value instanceof THREE.Texture)textures.add(value);
+      material.dispose();
+    }
+  });
+  for(const texture of textures){
+    texture.dispose();
+    texture.source.data?.close?.();
+  }
+}
+
+function bindEye(root:THREE.Object3D,side:'left'|'right') {
+  let joint:THREE.Bone|undefined, lid:THREE.Mesh|undefined;
+  root.traverse(node=>{
+    if(node instanceof THREE.Bone && node.userData.runtime_role==='eye_'+side)joint=node;
+    if(node instanceof THREE.Mesh && node.userData.name==='Upper eyelid.'+(side==='left'?'L':'R'))lid=node;
+  });
+  if(!joint || !lid || !lid.morphTargetInfluences || lid.morphTargetDictionary?.Blink===undefined)
+    throw new Error('Missing V15 eye rig: '+side);
+  const bone=joint, rest=bone.quaternion.clone(), animated=rest.clone();
+  const weights=lid.morphTargetInfluences, blink=lid.morphTargetDictionary.Blink;
+  const up=new THREE.Vector3().fromArray(bone.userData.local_up_axis).normalize();
+  const pitchAxis=new THREE.Vector3().fromArray(bone.userData.local_forward_axis).cross(up).normalize();
+  const rotation=new THREE.Quaternion();
+  let authoredBlink=weights[blink];
+  return {
+    restore(){bone.quaternion.copy(animated);weights[blink]=authoredBlink;},
+    apply(props:Props,now:number){
+      animated.copy(bone.quaternion);authoredBlink=weights[blink];
+      if(props.tracking){
+        const {yaw,pitch}=eyeRotation(props.gaze.current,side==='left'?0.34:-0.34,props.mirror);
+        bone.quaternion.copy(rest)
+          .multiply(rotation.setFromAxisAngle(up,THREE.MathUtils.clamp(yaw,-0.244,0.244)))
+          .multiply(rotation.setFromAxisAngle(pitchAxis,THREE.MathUtils.clamp(-pitch,-0.192,0.192)));
+      }
+      const age=now-props.cue.at;
+      if(props.cue.kind===side && age>=0 && age<650)
+        weights[blink]=Math.max(authoredBlink,Math.sin(Math.PI*age/650));
+    }
+  };
+}
+
 export default function Character(props:Props) {
-  const mount=useRef<HTMLDivElement>(null);
-  const live=useRef(props);
+  const mount=useRef<HTMLDivElement>(null), live=useRef(props);
   useEffect(()=>{live.current=props;},[props]);
   useEffect(()=>{
     const host=mount.current!;
     let renderer:THREE.WebGLRenderer;
     try {renderer=new THREE.WebGLRenderer({alpha:true,antialias:true});}
     catch {live.current.onState('error');return;}
-    host.appendChild(renderer.domElement);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+    host.appendChild(renderer.domElement);
     const scene=new THREE.Scene();
-    const camera=new THREE.OrthographicCamera(-1.6,1.6,1.6,-1.6,0.1,20);
-    camera.position.z=6;
-    const robot=new THREE.Group();
-    scene.add(robot,new THREE.HemisphereLight(0xfff5df,0x899cb5,2));
-    const light=new THREE.DirectionalLight(0xffffff,2.5);
-    light.position.set(2,4,5);scene.add(light);
-    const sphere=new THREE.SphereGeometry(1,32,24);
-    const materials=new Map<number,THREE.MeshStandardMaterial>();
-    function oval(parent:THREE.Object3D,color:number,pos:number[],scale:number[]) {
-      if(!materials.has(color)) materials.set(color,new THREE.MeshStandardMaterial({color,roughness:0.4}));
-      const mesh=new THREE.Mesh(sphere,materials.get(color));
-      mesh.position.set(pos[0],pos[1],pos[2]);mesh.scale.set(scale[0],scale[1],scale[2]);
-      parent.add(mesh);return mesh;
-    }
-    const teal=0x48d6c0, ink=0x163445;
-    oval(robot,teal,[0,-0.75,0],[0.58,0.62,0.46]);
-    oval(robot,teal,[0,0.17,0],[0.94,0.72,0.61]);
-    oval(robot,ink,[0,0.22,0.39],[0.82,0.48,0.3]);
-    oval(robot,0xffc358,[0,1.0,0],[0.13,0.22,0.13]);
-    const arms=[-1,1].map(side=>oval(robot,teal,[side*0.66,-0.62,0],[0.17,0.38,0.19]));
-    // Character's own left is on the viewer's right.
-    const eyes=[0.34,-0.34].map(x=>{
-      const lid=new THREE.Group(), pivot=new THREE.Group();
-      lid.position.set(x,0.27,0.63);robot.add(lid);lid.add(pivot);
-      oval(pivot,0xfffaf0,[0,0,0],[0.245,0.25,0.21]);
-      oval(pivot,ink,[0,0,0.19],[0.115,0.13,0.05]);
-      oval(pivot,0xffffff,[-0.038,0.044,0.235],[0.028,0.028,0.015]);
-      return {lid,pivot,x};
-    });
-    const resize=new ResizeObserver(()=>{
+    scene.add(new THREE.HemisphereLight(0xfffaf0,0xa4a7bb,2));
+    const light=new THREE.DirectionalLight(0xffffff,2);
+    light.position.set(2,5,6);scene.add(light);
+    const camera=new THREE.OrthographicCamera(-3,3,2.6,-2.6,0.1,30);
+    camera.position.set(0,2.26,9);
+    function fit(){
       const w=host.clientWidth,h=host.clientHeight;
-      if(!w || !h)return;
-      camera.left=-1.6*w/h;camera.right=1.6*w/h;
+      if(!w||!h)return;
+      const height=Math.max(5.2,4.3*h/w);
+      camera.top=height/2;camera.bottom=-camera.top;
+      camera.right=height*w/h/2;camera.left=-camera.right;
       camera.updateProjectionMatrix();renderer.setSize(w,h,false);
-    });
-    resize.observe(host);
-    let raf=0;
-    function draw(now:number) {
-      const {cue,gaze,mirror}=live.current;
-      const age=now-cue.at;
-      const pose=cue.kind==='photo' && age>=0 && age<1600?Math.sin(Math.PI*age/1600):0;
-      robot.position.y=0.04*Math.sin(now/520)+pose*0.10;
-      robot.rotation.z=pose*0.14;
-      arms[0].rotation.z=-0.25-pose*1.9;arms[1].rotation.z=0.25+pose*1.9;
-      eyes.forEach(({lid,pivot,x},i)=>{
-        const {yaw,pitch}=eyeRotation(gaze.current,x,mirror);
-        pivot.rotation.set(pitch,yaw,0);
-        const wink=age>=0 && age<650 && cue.kind===(i===0?'left':'right');
-        lid.scale.y=wink?1-0.94*Math.sin(Math.PI*age/650):1;
-      });
-      renderer.render(scene,camera);
-      raf=requestAnimationFrame(draw);
     }
-    const lost=(event:Event)=>{event.preventDefault();cancelAnimationFrame(raf);live.current.onState('error');};
-    renderer.domElement.addEventListener('webglcontextlost',lost);
-    raf=requestAnimationFrame(draw);live.current.onState('ready');
+    const resize=new ResizeObserver(fit);
+    resize.observe(host);fit();
+    let disposed=false, failed=false, raf=0;
+    let model:THREE.Object3D|undefined, mixer:THREE.AnimationMixer|undefined;
+    const fail=()=>{
+      if(disposed)return;
+      failed=true;cancelAnimationFrame(raf);live.current.onState('error');
+    };
+    renderer.domElement.addEventListener('webglcontextlost',fail);
+    async function load(){
+      const gltf=await new GLTFLoader().loadAsync(modelUrl);
+      if(disposed||failed){releaseModel(gltf.scene);return;}
+      model=gltf.scene;scene.add(model);
+      const eyes=[bindEye(model,'left'),bindEye(model,'right')];
+      const animator=new THREE.AnimationMixer(model);mixer=animator;
+      const action=(name:string)=>{
+        const clip=THREE.AnimationClip.findByName(gltf.animations,name);
+        if(!clip)throw new Error('Missing V15 animation: '+name);
+        return animator.clipAction(clip);
+      };
+      const stand=action('Idle_03_Stand_Look').play();
+      const pose=action('Gesture_YA').setLoop(THREE.LoopOnce,1);
+      pose.clampWhenFinished=true;
+      animator.addEventListener('finished',()=>{
+        stand.reset().setEffectiveWeight(1).play();pose.crossFadeTo(stand,0.25,false);
+      });
+      let last=performance.now(), playedAt=-Infinity;
+      function draw(now:number){
+        const {cue}=live.current;
+        if(cue.kind==='photo' && cue.at>playedAt){
+          playedAt=cue.at;
+          pose.reset().setEffectiveWeight(1).play();
+          if(stand.isRunning())stand.crossFadeTo(pose,0.2,false);
+        }
+        eyes.forEach(eye=>eye.restore());
+        animator.update(Math.max(0,(now-last)/1000));last=now;
+        eyes.forEach(eye=>eye.apply(live.current,now));
+        renderer.render(scene,camera);raf=requestAnimationFrame(draw);
+      }
+      draw(performance.now());live.current.onState('ready');
+    }
+    void load().catch(error=>{console.error('V15 model',error);fail();});
     return ()=>{
-      cancelAnimationFrame(raf);resize.disconnect();sphere.dispose();
-      materials.forEach(m=>m.dispose());
-      renderer.domElement.removeEventListener('webglcontextlost',lost);
+      disposed=true;cancelAnimationFrame(raf);resize.disconnect();
+      mixer?.stopAllAction();
+      if(model){mixer?.uncacheRoot(model);releaseModel(model);}
+      renderer.domElement.removeEventListener('webglcontextlost',fail);
       renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();
     };
   },[]);
