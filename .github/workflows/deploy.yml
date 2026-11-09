@@ -1,5 +1,5 @@
 
-name: Deploy P0-1 to GitHub Pages
+name: Deploy photo booth to GitHub Pages
 
 on:
   push:
@@ -29,7 +29,10 @@ jobs:
           node-version: '22'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Test tracking
+        run: npm test
 
       - name: Build website
         run: npm run build
