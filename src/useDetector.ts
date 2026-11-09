@@ -42,7 +42,8 @@ export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|nul
       setStats({...initial,state:'running'});
       void GestureRecognizer.createFromOptions(files,{
         baseOptions:{modelAssetPath:base+'models/gesture_recognizer.task'},
-        runningMode:'VIDEO',numHands:10
+        runningMode:'VIDEO',numHands:10,minHandDetectionConfidence:0.40,
+        minHandPresenceConfidence:0.40,minTrackingConfidence:0.45
       }).then(task=>{
         if(disposed || faceFailed){task.close();return;}
         gesture=task;setGestureState('running');
@@ -64,9 +65,9 @@ export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|nul
               try{
                 const result=gesture.recognizeForVideo(el,now);
                 const hands=result.landmarks.flatMap((landmarks,i)=>{
-                  const wrist=landmarks[0], label=result.gestures[i]?.[0];
-                  return wrist && label?[{x:wrist.x*el.videoWidth,y:wrist.y*el.videoHeight,
-                    category:label.categoryName,score:label.score}]:[];
+                  const palm=landmarks[9], label=result.gestures[i]?.[0];
+                  return palm?[{x:palm.x*el.videoWidth,y:palm.y*el.videoHeight,
+                    category:label?.categoryName??'None',score:label?.score??0}]:[];
                 });
                 setConsent(group.step(boxes.map(b=>({x:b.originX+b.width/2,y:b.originY+b.height/2,
                   width:b.width,height:b.height})),hands,now));

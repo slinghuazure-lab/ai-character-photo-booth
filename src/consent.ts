@@ -1,11 +1,11 @@
 export type Face = {x:number; y:number; width:number; height:number};
 export type Hand = {x:number; y:number; category:string; score:number};
-type Participant = {id:number; face:Face; since:number|null; confirmed:boolean};
-export type Consent = {count:number; confirmed:number; ready:boolean; ambiguous:boolean};
-export const emptyConsent:Consent={count:0,confirmed:0,ready:false,ambiguous:false};
+type Participant = {id:number; face:Face; held:number; lastYA:number|null; seen:boolean; confirmed:boolean};
+export type Consent = {count:number; confirmed:number; ready:boolean; ambiguous:boolean; progress:number; handCount:number};
+export const emptyConsent:Consent={count:0,confirmed:0,ready:false,ambiguous:false,progress:0,handCount:0};
 
 // Coordinates are in original video pixels. Only unambiguous, continuous evidence counts.
-export const YA_HOLD_MS=3000;
+export const YA_HOLD_MS=1000;
 export class ConsentTracker {
   private people:Participant[]=[];
   private nextId=1;
@@ -18,30 +18,41 @@ export class ConsentTracker {
       return {...emptyConsent,count};
     }
     const previous=this.people;
+    const dt=now-this.last;
     const candidates=faces.map(face=>previous.filter(person=>
       Math.hypot(person.face.x-face.x,person.face.y-face.y)<Math.min(face.width,person.face.width)*0.75));
     const continuous=now>=this.last && now-this.last<=450 && previous.length===count &&
       candidates.every(list=>list.length===1) && new Set(candidates.map(list=>list[0])).size===count;
     this.last=now;
     this.people=faces.map((face,i)=>continuous?{...candidates[i][0],face}:
-      {id:this.nextId++,face,since:null,confirmed:false});
+      {id:this.nextId++,face,held:0,lastYA:null,seen:false,confirmed:false});
     const evidence=new Set<number>();
+    const rejected=new Set<number>();
     let ambiguous=false;
     for(const hand of hands){
-      if(hand.category!=='Victory' || hand.score<0.7)continue;
+      const ya=hand.category==='Victory' && hand.score>=0.50;
+      const other=hand.category!=='None' && hand.category!=='Victory' && hand.score>=0.65;
+      if(!ya && !other)continue;
       const owners=this.people.filter(({face})=>
-        Math.abs(hand.x-face.x)<=1.7*face.width && Math.abs(hand.y-face.y)<=1.5*face.height);
-      if(owners.length===1)evidence.add(owners[0].id);
-      else if(owners.length>1)ambiguous=true;
+        Math.abs(hand.x-face.x)<=(count===1?2.6:1.7)*face.width && Math.abs(hand.y-face.y)<=(count===1?2.2:1.5)*face.height);
+      if(owners.length===1)(ya?evidence:rejected).add(owners[0].id);
+      else if(ya && owners.length>1)ambiguous=true;
     }
     for(const person of this.people){
-      if(ambiguous || !evidence.has(person.id))person.since=null;
-      else {
-        person.since??=now;
-        if(now-person.since>=YA_HOLD_MS)person.confirmed=true;
+      const positive=!ambiguous && evidence.has(person.id);
+      if(ambiguous || (!positive && rejected.has(person.id)) ||
+          (person.lastYA!==null && now-person.lastYA>500)){
+        person.held=0;person.seen=false;person.lastYA=null;
       }
+      if(positive){
+        if(person.seen)person.held+=dt;
+        person.lastYA=now;
+        if(person.held>=YA_HOLD_MS)person.confirmed=true;
+      }
+      person.seen=positive;
     }
     const confirmed=this.people.filter(p=>p.confirmed).length;
-    return {count,confirmed,ready:!ambiguous && confirmed===count,ambiguous};
+    const progress=Math.max(0,...this.people.filter(p=>!p.confirmed).map(p=>p.held));
+    return {count,confirmed,ready:!ambiguous && confirmed===count,ambiguous,progress,handCount:hands.length};
   }
 }

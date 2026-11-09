@@ -78,6 +78,8 @@ export default function App(){
       {status==='active'&&<div className="consent-panel">
         <strong>{labels.consent} · {consent.confirmed}/{consent.count}</strong>
         <span>{gestureState!=='running'?labels[gestureState]:consent.count>5?labels.limit:consent.ambiguous?labels.separate:consent.ready?labels.allReady:labels.gestureHelp}</span>
+        {gestureState==='running' && consent.count>0 && consent.count<=5 && !consent.ready &&
+          <small>{labels.hands} {consent.handCount} · {labels.hold} {Math.floor(consent.progress/100)/10} / 1 s</small>}
       </div>}
       <div className="stage-footer"><div className="privacy"><ShieldCheck size={17}/><span>{l('privacy')}</span></div><div className="controls">{status==='active'&&(['left','right','photo'] as const).map(kind=><button key={kind} disabled={renderer!=='ready'} className="subtle-button" onClick={()=>play(kind)}>{labels[kind]}</button>)}{status==='active'?<button className="danger-button" onClick={stop}><CameraOff size={18}/>{l('stop')}</button>:<button className="primary-button" disabled={status==='loading'} onClick={()=>void start()}><Camera size={18}/>{status==='error'?l('retry'):l('start')}</button>}</div></div>
     </section>
