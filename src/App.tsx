@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {Camera,CameraOff,Settings2,Activity,Maximize,Minimize,RefreshCw,ShieldCheck,Monitor,Languages,RotateCcw} from 'lucide-react';
+import {Camera,CameraOff,Settings2,Activity,Maximize,Minimize,ShieldCheck,Monitor,Languages,RotateCcw} from 'lucide-react';
 import {cameraSupported,cameraErrorMessage,getCameraInfo,listCameras,startCamera,stopCamera,type CameraDevice,type CameraInfo,type Resolution} from './camera';
 import {loadSettings,saveSettings,defaults,type ExhibitSettings} from './settings';
 import {t,type MessageKey} from './i18n';
