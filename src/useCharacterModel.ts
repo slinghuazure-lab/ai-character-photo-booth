@@ -4,7 +4,7 @@ import {readAsset,saveAsset,type SavedAsset} from './modelStorage';
 
 type ActiveModel={source:string|null;name:string;key:string;catalog:ClipOption[];slots:AnimationSet};
 function builtin():ActiveModel{
-  return {source:null,name:'NTUB V15',key:'ntub-visitor-animations-v1',catalog:builtinCatalog,slots:loadAnimations()};
+  return {source:null,name:'NTUB V15R5 · 10 Actions',key:'ntub-visitor-animations-v1',catalog:builtinCatalog,slots:loadAnimations()};
 }
 function imported(asset:SavedAsset):ActiveModel{
   const catalog=asset.names.map((label,i)=>({id:'clip/'+i,label}));

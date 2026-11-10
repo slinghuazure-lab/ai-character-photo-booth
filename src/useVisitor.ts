@@ -12,8 +12,8 @@ import {writeRecord} from './photoHistoryStore';
 export type Observation=(boxes:FaceBox[],thumbs:Point[]|null,now:number)=>void;
 type Options={assetKey:string;active:boolean;animations:AnimationSet;mirror:boolean;ready:boolean;request:ShotRequest;painter:CharacterPainter;
   observe:RefObject<Observation|null>;captureLock:RefObject<FaceBox[]|null>;sound:()=>void;plate:ImageData|null};
-type View={phase:VisitorPhase;participants:number;seconds:number;reposition:boolean;clip:Clip;separate:boolean;qr:string;link:string;photo:string;error:string};
-const initial:View={phase:'idle',participants:0,seconds:0,reposition:false,clip:'Idle_03_Stand_Look',separate:false,qr:'',link:'',photo:'',error:''};
+type View={photoSecond:number;phase:VisitorPhase;participants:number;seconds:number;reposition:boolean;clip:Clip;separate:boolean;qr:string;link:string;photo:string;error:string};
+const initial:View={photoSecond:1,phase:'idle',participants:0,seconds:0,reposition:false,clip:'Idle_03_Stand_Look',separate:false,qr:'',link:'',photo:'',error:''};
 export function useVisitor(options:Options){
   const live=useRef(options);
   live.current=options;
@@ -25,7 +25,7 @@ export function useVisitor(options:Options){
     const controller=new AbortController();
     let ended=false,cycle=0,shotPending=false,qrUntil=0,idleAt=performance.now(),idleSlot=Math.floor(Math.random()*3);
     let clip:Clip=live.current.animations.idle[idleSlot], segmenter:ImageSegmenter|undefined,pose:PoseLandmarker|undefined;
-    let requestedAt=0;
+    let requestedAt=0,photoSecond=1;
     let photo='',qr='',link='',error='',lastKey='';
     const publish=(now:number)=>{
       options.captureLock.current=flow.phase==='countdown'?flow.people:
@@ -34,7 +34,7 @@ export function useVisitor(options:Options){
         flow.phase==='qr'?Math.max(1,Math.ceil((qrUntil-now)/1000)):0;
       const participants=flow.participants.size;
       const key=[flow.phase,participants,seconds,clip,flow.reposition,flow.separate,qr,error].join('|');
-      if(key!==lastKey && !ended){lastKey=key;setView({phase:flow.phase,participants,seconds,clip,reposition:flow.reposition,separate:flow.separate,qr,link,photo,error});}
+      if(key!==lastKey && !ended){lastKey=key;setView({photoSecond,phase:flow.phase,participants,seconds,clip,reposition:flow.reposition,separate:flow.separate,qr,link,photo,error});}
     };
     function resetFlow(){
       cycle++;shotPending=false;options.request.current=null;
@@ -112,6 +112,7 @@ export function useVisitor(options:Options){
       const before=flow.phase;
       flow.step(boxes,live.current.ready?thumbs:null,now);
       if(flow.phase==='countdown' && before!=='countdown'){
+        photoSecond=Math.random()<0.5?1:2;
         const list=live.current.animations.photo;clip=list[Math.floor(Math.random()*list.length)];
       }else if(flow.phase==='hello'||flow.phase==='invite')clip=live.current.animations.hello;
       if(flow.phase==='hello' && before==='idle')void prepare().catch(()=>{});

@@ -7,8 +7,8 @@ import {eyeRotation,type Point} from './tracking';
 import type {CharacterPainter} from './PhotoPanel';
 import type {Clip} from './animationSettings';
 export type Cue='photo'|'left'|'right';
-type Props={source:string|null;idle:Clip;pose:Clip;clip?:Clip;painter:CharacterPainter; gaze:RefObject<Point>; tracking:boolean; mirror:boolean; cue:{kind:Cue;at:number}; onState:(value:'ready'|'error')=>void};
-const modelUrl=import.meta.env.BASE_URL+'models/NTUB_Doctoral_Owl_6_Actions.glb';
+type Props={source:string|null;idle:Clip;pose:Clip;clip?:Clip;photoSecond?:number;painter:CharacterPainter; gaze:RefObject<Point>; tracking:boolean; mirror:boolean; cue:{kind:Cue;at:number}; onState:(value:'ready'|'error')=>void};
+const modelUrl=import.meta.env.BASE_URL+'models/NTUB_Doctoral_Owl_v15R5_10_Actions.glb';
 
 function bindEye(root:THREE.Object3D,side:'left'|'right') {
   let joint:THREE.Bone|undefined, lid:THREE.Mesh|undefined;
@@ -97,9 +97,8 @@ export default function Character(props:Props) {
       };
       const idle=()=>custom?live.current.idle:'Idle_03_Stand_Look';
       let stand=action(idle()).play();
-      let activeClip:Clip|undefined;
-      const arm=model.getObjectByProperty('name','upper_armR')??model.getObjectByName('upper_arm.R');
-      const animatedArm=new THREE.Quaternion();let waved=false;
+      let activeClip:Clip|undefined,activeSecond:number|undefined;
+      let clipStarted=0;
       let pose=action(custom?live.current.pose:'Gesture_YA');
       pose.clampWhenFinished=true;
       animator.addEventListener('finished',()=>{
@@ -109,11 +108,14 @@ export default function Character(props:Props) {
       function draw(now:number){
         const {cue}=live.current;
         const clip=live.current.clip??idle();
-        if(clip!==activeClip){
-          const next=action(!custom&&clip==='Hello'?'Idle_03_Stand_Look':clip);
+        const second=live.current.photoSecond;
+        if(clip!==activeClip || second!==activeSecond){
+          stand.paused=false;
+          const next=action(clip);
           next.setLoop(THREE.LoopRepeat,Infinity);
           if(next!==stand){next.reset().setEffectiveWeight(1).play();stand.crossFadeTo(next,0.35,false);stand=next;}
-          activeClip=clip;
+          activeClip=clip;activeSecond=second;clipStarted=now;
+          if(second!==undefined){stand.paused=true;stand.time=0;}
         }
         if(!live.current.clip && cue.kind==='photo' && cue.at>playedAt){
           playedAt=cue.at;
@@ -122,15 +124,19 @@ export default function Character(props:Props) {
           if(stand!==pose&&stand.isRunning())stand.crossFadeTo(pose,0.2,false);
         }
         eyes.forEach(eye=>eye?.restore());
-        if(arm&&waved)arm.quaternion.copy(animatedArm);
+        if(second!==undefined)stand.time=Math.min((now-clipStarted)/1000,second,stand.getClip().duration);
         animator.update(Math.max(0,(now-last)/1000));last=now;
-        waved=clip==='Hello' && !!arm;
-        if(arm&&waved){animatedArm.copy(arm.quaternion);arm.rotateZ(-0.72+0.24*Math.sin(now/160));}
         eyes.forEach(eye=>eye?.apply(live.current,now));
         renderer.render(scene,camera);raf=requestAnimationFrame(draw);
       }
       live.current.painter.current=ctx=>{
-        // Render the current pose into the export at its own aspect ratio.
+        const shot=action(live.current.clip??live.current.pose).getClip();
+        const second=live.current.photoSecond??(Math.random()<0.5?1:2);
+        const exportMixer=new THREE.AnimationMixer(model!);
+        const sample=exportMixer.clipAction(shot);
+        sample.play();sample.paused=true;
+        sample.time=Math.min(second,shot.duration);
+        exportMixer.update(0);
         const width=800,height=780, exportCamera=camera.clone();
         exportCamera.top=2.6;exportCamera.bottom=-2.6;
         exportCamera.right=2.6*width/height;exportCamera.left=-exportCamera.right;
@@ -139,7 +145,7 @@ export default function Character(props:Props) {
           renderer.setSize(width,height,false);
           renderer.render(scene,exportCamera);
           ctx.drawImage(renderer.domElement,0,1080-height,width,height);
-        }finally{fit();}
+        }finally{exportMixer.stopAllAction();exportMixer.uncacheRoot(model!);fit();}
       };
       draw(performance.now());live.current.onState('ready');
     }
