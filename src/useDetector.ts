@@ -2,13 +2,16 @@ import {useEffect,useRef,useState,type RefObject} from 'react';
 import {TargetTracker} from './tracking';
 
 import {ConsentTracker,emptyConsent} from './consent';
+import type {ShotRequest} from './PhotoPanel';
+import {assessLighting,LightingMonitor,type Lighting} from './lighting';
 type GestureState='off'|'loading'|'running'|'error';
 const initial={state:'off', count:0, tracking:false, hz:0, ms:0, point:{x:0.5,y:0.5}, detail:''} as const;
 type Stats={state:'off'|'loading'|'running'|'error'; count:number; tracking:boolean; hz:number; ms:number; point:{x:number;y:number};detail:string};
-export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|null>) {
+export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|null>,request:ShotRequest) {
   const [stats,setStats]=useState<Stats>(initial);
   const [consent,setConsent]=useState(emptyConsent);
   const [gestureState,setGestureState]=useState<GestureState>('off');
+  const [lighting,setLighting]=useState<Lighting>('waiting');
   const gaze=useRef<{x:number;y:number}>({...initial.point});
   useEffect(()=>{
     let disposed=false, raf=0;
@@ -16,6 +19,11 @@ export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|nul
     let gesture:import('@mediapipe/tasks-vision').GestureRecognizer|undefined;
     let faceFailed=false;
     const group=new ConsentTracker();
+    const monitor=new LightingMonitor();
+    let lastLight=-Infinity;
+    const meter=document.createElement('canvas');meter.width=96;meter.height=64;
+    const ctx=meter.getContext('2d',{willReadFrequently:true});
+    setLighting('waiting');
     const tracker=new TargetTracker();
     gaze.current=initial.point;
     setStats({...initial,state:active?'loading':'off'});
@@ -23,7 +31,7 @@ export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|nul
     if(!active) return;
     function fail(error:unknown) {
       if(disposed) return;
-      faceFailed=true;gesture?.close();gesture=undefined;
+      setLighting('waiting');faceFailed=true;gesture?.close();gesture=undefined;
       setConsent(emptyConsent);setGestureState('off');
       detector?.close(); detector=undefined;
       gaze.current=initial.point;
@@ -56,21 +64,42 @@ export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|nul
           try {
             lastFresh=now;last=now; videoTime=el.currentTime;
             const start=performance.now();
-            const result=task.detectForVideo(el,now);
+            let still:HTMLCanvasElement|null=null;
+            if(request.current && gesture && now-lastGesture>=150){
+              still=document.createElement('canvas');still.width=el.videoWidth;still.height=el.videoHeight;
+              const ctx=still.getContext('2d');
+              if(ctx)ctx.drawImage(el,0,0);else still=null;
+            }
+            const result=task.detectForVideo(still??el,now);
             const ms=Math.round(performance.now()-start);
             const boxes=result.detections.flatMap(d=>d.boundingBox?[d.boundingBox]:[]);
             const frame=tracker.step(boxes,el.videoWidth,el.videoHeight,now);
+            if(ctx && now-lastLight>=300){
+              lastLight=now;
+              let reading=null;
+              if(boxes.length){
+                ctx.drawImage(el,0,0,meter.width,meter.height);
+                reading=assessLighting(ctx.getImageData(0,0,meter.width,meter.height),boxes.map(b=>({
+                  originX:b.originX/el.videoWidth,originY:b.originY/el.videoHeight,
+                  width:b.width/el.videoWidth,height:b.height/el.videoHeight
+                })));
+              }
+              setLighting(monitor.update(reading,now));
+            }
             if(gesture && now-lastGesture>=150){
               lastGesture=now;
               try{
-                const result=gesture.recognizeForVideo(el,now);
+                const result=gesture.recognizeForVideo(still??el,now);
                 const hands=result.landmarks.flatMap((landmarks,i)=>{
                   const palm=landmarks[9], label=result.gestures[i]?.[0];
                   return palm?[{x:palm.x*el.videoWidth,y:palm.y*el.videoHeight,
                     category:label?.categoryName??'None',score:label?.score??0}]:[];
                 });
-                setConsent(group.step(boxes.map(b=>({x:b.originX+b.width/2,y:b.originY+b.height/2,
-                  width:b.width,height:b.height})),hands,now));
+                const consent=group.step(boxes.map(b=>({x:b.originX+b.width/2,y:b.originY+b.height/2,
+                  width:b.width,height:b.height})),hands,now);
+                setConsent(consent);
+                const capture=request.current;
+                if(capture){request.current=null;capture(consent.ready?still:null,boxes);}
               }catch(error){
                 console.error(error);gesture.close();gesture=undefined;setConsent(emptyConsent);setGestureState('error');
               }
@@ -82,7 +111,7 @@ export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|nul
           } catch(error) {fail(error);return;}
         }
         if(lastFresh && now-lastFresh>450){
-          group.step([],[],now);setConsent(emptyConsent);lastFresh=0;
+          setLighting(monitor.update(null,now));group.step([],[],now);setConsent(emptyConsent);lastFresh=0;
         }
         raf=requestAnimationFrame(tick);
       };
@@ -90,6 +119,6 @@ export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|nul
     }
     void start().catch(fail);
     return ()=>{disposed=true;cancelAnimationFrame(raf);gesture?.close();detector?.close();};
-  },[active,video]);
-  return {stats,gaze,gestureState,consent};
+  },[active,video,request]);
+  return {stats,gaze,gestureState,consent,lighting};
 }

@@ -3,8 +3,9 @@ import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {eyeRotation,type Point} from './tracking';
 
+import type {CharacterPainter} from './PhotoPanel';
 export type Cue='photo'|'left'|'right';
-type Props={gaze:RefObject<Point>; tracking:boolean; mirror:boolean; cue:{kind:Cue;at:number}; onState:(value:'ready'|'error')=>void};
+type Props={painter:CharacterPainter; gaze:RefObject<Point>; tracking:boolean; mirror:boolean; cue:{kind:Cue;at:number}; onState:(value:'ready'|'error')=>void};
 const modelUrl=import.meta.env.BASE_URL+'models/NTUB_Doctoral_Owl_6_Actions.glb';
 
 function releaseModel(root:THREE.Object3D) {
@@ -118,11 +119,23 @@ export default function Character(props:Props) {
         eyes.forEach(eye=>eye.apply(live.current,now));
         renderer.render(scene,camera);raf=requestAnimationFrame(draw);
       }
+      live.current.painter.current=ctx=>{
+        // Render the current pose into the export at its own aspect ratio.
+        const width=800,height=780, exportCamera=camera.clone();
+        exportCamera.top=2.6;exportCamera.bottom=-2.6;
+        exportCamera.right=2.6*width/height;exportCamera.left=-exportCamera.right;
+        exportCamera.updateProjectionMatrix();
+        try{
+          renderer.setSize(width,height,false);
+          renderer.render(scene,exportCamera);
+          ctx.drawImage(renderer.domElement,0,1080-height,width,height);
+        }finally{fit();}
+      };
       draw(performance.now());live.current.onState('ready');
     }
     void load().catch(error=>{console.error('V15 model',error);fail();});
     return ()=>{
-      disposed=true;cancelAnimationFrame(raf);resize.disconnect();
+      live.current.painter.current=null;disposed=true;cancelAnimationFrame(raf);resize.disconnect();
       mixer?.stopAllAction();
       if(model){mixer?.uncacheRoot(model);releaseModel(model);}
       renderer.domElement.removeEventListener('webglcontextlost',fail);
