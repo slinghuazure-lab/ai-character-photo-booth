@@ -28,7 +28,7 @@ export default function App(){
   const videoRef=useRef<HTMLVideoElement>(null);
   const request:ShotRequest=useRef(null);
   const painter:CharacterPainter=useRef(null);
-  const {stats,gaze,gestureState,consent}=useDetector(status==='active',videoRef,request);
+  const {stats,gaze,gestureState,consent,lighting}=useDetector(status==='active',videoRef,request);
   const labels=exhibitLabels(settings.language);
   const [renderer,setRenderer]=useState<'ready'|'error'|'loading'>('loading');
   const [cue,setCue]=useState<{kind:Cue;at:number}>({kind:'photo',at:-Infinity});
@@ -84,7 +84,7 @@ export default function App(){
         {gestureState==='running' && consent.count>0 && consent.count<=5 && !consent.ready &&
           <small>{labels.hands} {consent.handCount} · {labels.hold} {Math.floor(consent.progress/100)/10} / 1 s</small>}
       </div>}
-      {status==='active'&&<PhotoPanel video={videoRef} empty={stats.state==='running' && stats.count===0 && !stats.tracking} language={settings.language} mirror={settings.mirror}
+      {status==='active'&&<PhotoPanel lighting={lighting} video={videoRef} empty={stats.state==='running' && stats.count===0 && !stats.tracking} language={settings.language} mirror={settings.mirror}
         ready={consent.ready && stats.state==='running' && gestureState==='running' && renderer==='ready'} request={request} painter={painter}/>}
       <div className="stage-footer"><div className="privacy"><ShieldCheck size={17}/><span>{l('privacy')}</span></div><div className="controls">{status==='active'&&(['left','right','photo'] as const).map(kind=><button key={kind} disabled={renderer!=='ready'} className="subtle-button" onClick={()=>play(kind)}>{labels[kind]}</button>)}{status==='active'?<button className="danger-button" onClick={stop}><CameraOff size={18}/>{l('stop')}</button>:<button className="primary-button" disabled={status==='loading'} onClick={()=>void start()}><Camera size={18}/>{status==='error'?l('retry'):l('start')}</button>}</div></div>
     </section>
