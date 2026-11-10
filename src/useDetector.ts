@@ -2,10 +2,11 @@ import {useEffect,useRef,useState,type RefObject} from 'react';
 import {TargetTracker} from './tracking';
 
 import {ConsentTracker,emptyConsent} from './consent';
+import type {ShotRequest} from './PhotoPanel';
 type GestureState='off'|'loading'|'running'|'error';
 const initial={state:'off', count:0, tracking:false, hz:0, ms:0, point:{x:0.5,y:0.5}, detail:''} as const;
 type Stats={state:'off'|'loading'|'running'|'error'; count:number; tracking:boolean; hz:number; ms:number; point:{x:number;y:number};detail:string};
-export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|null>) {
+export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|null>,request:ShotRequest) {
   const [stats,setStats]=useState<Stats>(initial);
   const [consent,setConsent]=useState(emptyConsent);
   const [gestureState,setGestureState]=useState<GestureState>('off');
@@ -56,21 +57,30 @@ export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|nul
           try {
             lastFresh=now;last=now; videoTime=el.currentTime;
             const start=performance.now();
-            const result=task.detectForVideo(el,now);
+            let still:HTMLCanvasElement|null=null;
+            if(request.current && gesture && now-lastGesture>=150){
+              still=document.createElement('canvas');still.width=el.videoWidth;still.height=el.videoHeight;
+              const ctx=still.getContext('2d');
+              if(ctx)ctx.drawImage(el,0,0);else still=null;
+            }
+            const result=task.detectForVideo(still??el,now);
             const ms=Math.round(performance.now()-start);
             const boxes=result.detections.flatMap(d=>d.boundingBox?[d.boundingBox]:[]);
             const frame=tracker.step(boxes,el.videoWidth,el.videoHeight,now);
             if(gesture && now-lastGesture>=150){
               lastGesture=now;
               try{
-                const result=gesture.recognizeForVideo(el,now);
+                const result=gesture.recognizeForVideo(still??el,now);
                 const hands=result.landmarks.flatMap((landmarks,i)=>{
                   const palm=landmarks[9], label=result.gestures[i]?.[0];
                   return palm?[{x:palm.x*el.videoWidth,y:palm.y*el.videoHeight,
                     category:label?.categoryName??'None',score:label?.score??0}]:[];
                 });
-                setConsent(group.step(boxes.map(b=>({x:b.originX+b.width/2,y:b.originY+b.height/2,
-                  width:b.width,height:b.height})),hands,now));
+                const consent=group.step(boxes.map(b=>({x:b.originX+b.width/2,y:b.originY+b.height/2,
+                  width:b.width,height:b.height})),hands,now);
+                setConsent(consent);
+                const capture=request.current;
+                if(capture){request.current=null;capture(consent.ready?still:null);}
               }catch(error){
                 console.error(error);gesture.close();gesture=undefined;setConsent(emptyConsent);setGestureState('error');
               }
@@ -90,6 +100,6 @@ export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|nul
     }
     void start().catch(fail);
     return ()=>{disposed=true;cancelAnimationFrame(raf);gesture?.close();detector?.close();};
-  },[active,video]);
+  },[active,video,request]);
   return {stats,gaze,gestureState,consent};
 }
