@@ -1,29 +1,14 @@
 import {useEffect,useRef,type RefObject} from 'react';
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {fileLoader,releaseModel} from './modelImport';
 import {eyeRotation,type Point} from './tracking';
 
 import type {CharacterPainter} from './PhotoPanel';
+import type {Clip} from './animationSettings';
 export type Cue='photo'|'left'|'right';
-type Props={painter:CharacterPainter; gaze:RefObject<Point>; tracking:boolean; mirror:boolean; cue:{kind:Cue;at:number}; onState:(value:'ready'|'error')=>void};
-const modelUrl=import.meta.env.BASE_URL+'models/NTUB_Doctoral_Owl_6_Actions.glb';
-
-function releaseModel(root:THREE.Object3D) {
-  const textures=new Set<THREE.Texture>();
-  root.traverse(node=>{
-    if(!(node instanceof THREE.Mesh))return;
-    node.geometry.dispose();
-    if(node instanceof THREE.SkinnedMesh)node.skeleton.dispose();
-    for(const material of Array.isArray(node.material)?node.material:[node.material]){
-      for(const value of Object.values(material))if(value instanceof THREE.Texture)textures.add(value);
-      material.dispose();
-    }
-  });
-  for(const texture of textures){
-    texture.dispose();
-    texture.source.data?.close?.();
-  }
-}
+type Props={source:string|null;idle:Clip;pose:Clip;clip?:Clip;photoSecond?:number;painter:CharacterPainter; gaze:RefObject<Point>; tracking:boolean; mirror:boolean; cue:{kind:Cue;at:number}; onState:(value:'ready'|'error')=>void};
+const modelUrl=import.meta.env.BASE_URL+'models/NTUB_Doctoral_Owl_v15R5_10_Actions.glb';
 
 function bindEye(root:THREE.Object3D,side:'left'|'right') {
   let joint:THREE.Bone|undefined, lid:THREE.Mesh|undefined;
@@ -32,7 +17,7 @@ function bindEye(root:THREE.Object3D,side:'left'|'right') {
     if(node instanceof THREE.Mesh && node.userData.name==='Upper eyelid.'+(side==='left'?'L':'R'))lid=node;
   });
   if(!joint || !lid || !lid.morphTargetInfluences || lid.morphTargetDictionary?.Blink===undefined)
-    throw new Error('Missing V15 eye rig: '+side);
+    return null;
   const bone=joint, rest=bone.quaternion.clone(), animated=rest.clone();
   const weights=lid.morphTargetInfluences, blink=lid.morphTargetDictionary.Blink;
   const up=new THREE.Vector3().fromArray(bone.userData.local_up_axis).normalize();
@@ -90,37 +75,68 @@ export default function Character(props:Props) {
     };
     renderer.domElement.addEventListener('webglcontextlost',fail);
     async function load(){
-      const gltf=await new GLTFLoader().loadAsync(modelUrl);
+      const custom=!!props.source;
+      const gltf=custom?await fileLoader().loadAsync(props.source!):await new GLTFLoader().loadAsync(modelUrl);
       if(disposed||failed){releaseModel(gltf.scene);return;}
-      model=gltf.scene;scene.add(model);
+      model=gltf.scene;
+      if(custom){
+        const wrap=new THREE.Group();wrap.add(model);
+        const bounds=new THREE.Box3().setFromObject(model,true),size=bounds.getSize(new THREE.Vector3());
+        const scale=Math.min(4.5/Math.max(size.y,.001),4.1/Math.max(size.x,.001),4.1/Math.max(size.z,.001));
+        wrap.scale.setScalar(scale);
+        const center=bounds.getCenter(new THREE.Vector3());
+        wrap.position.set(-center.x*scale,2.26-center.y*scale,-center.z*scale);
+        scene.add(wrap);
+      }else scene.add(model);
       const eyes=[bindEye(model,'left'),bindEye(model,'right')];
       const animator=new THREE.AnimationMixer(model);mixer=animator;
       const action=(name:string)=>{
-        const clip=THREE.AnimationClip.findByName(gltf.animations,name);
-        if(!clip)throw new Error('Missing V15 animation: '+name);
+        const clip=custom?(gltf.animations[Number(name.split('/')[1])]??gltf.animations[0]):THREE.AnimationClip.findByName(gltf.animations,name);
+        if(!clip)throw new Error('Animation unavailable: '+name);
         return animator.clipAction(clip);
       };
-      const stand=action('Idle_03_Stand_Look').play();
-      const pose=action('Gesture_YA').setLoop(THREE.LoopOnce,1);
+      const idle=()=>custom?live.current.idle:'Idle_03_Stand_Look';
+      let stand=action(idle()).play();
+      let activeClip:Clip|undefined,activeSecond:number|undefined;
+      let clipStarted=0;
+      let pose=action(custom?live.current.pose:'Gesture_YA');
       pose.clampWhenFinished=true;
       animator.addEventListener('finished',()=>{
-        stand.reset().setEffectiveWeight(1).play();pose.crossFadeTo(stand,0.25,false);
+        stand.reset().setLoop(THREE.LoopRepeat,Infinity).setEffectiveWeight(1).play();if(pose!==stand)pose.crossFadeTo(stand,0.25,false);
       });
       let last=performance.now(), playedAt=-Infinity;
       function draw(now:number){
         const {cue}=live.current;
-        if(cue.kind==='photo' && cue.at>playedAt){
-          playedAt=cue.at;
-          pose.reset().setEffectiveWeight(1).play();
-          if(stand.isRunning())stand.crossFadeTo(pose,0.2,false);
+        const clip=live.current.clip??idle();
+        const second=live.current.photoSecond;
+        if(clip!==activeClip || second!==activeSecond){
+          stand.paused=false;
+          const next=action(clip);
+          next.setLoop(THREE.LoopRepeat,Infinity);
+          if(next!==stand){next.reset().setEffectiveWeight(1).play();stand.crossFadeTo(next,0.35,false);stand=next;}
+          activeClip=clip;activeSecond=second;clipStarted=now;
+          if(second!==undefined){stand.paused=true;stand.time=0;}
         }
-        eyes.forEach(eye=>eye.restore());
+        if(!live.current.clip && cue.kind==='photo' && cue.at>playedAt){
+          playedAt=cue.at;
+          pose=action(custom?live.current.pose:'Gesture_YA');pose.clampWhenFinished=true;
+          pose.reset().setLoop(THREE.LoopOnce,1).setEffectiveWeight(1).play();
+          if(stand!==pose&&stand.isRunning())stand.crossFadeTo(pose,0.2,false);
+        }
+        eyes.forEach(eye=>eye?.restore());
+        if(second!==undefined)stand.time=Math.min((now-clipStarted)/1000,second,stand.getClip().duration);
         animator.update(Math.max(0,(now-last)/1000));last=now;
-        eyes.forEach(eye=>eye.apply(live.current,now));
+        eyes.forEach(eye=>eye?.apply(live.current,now));
         renderer.render(scene,camera);raf=requestAnimationFrame(draw);
       }
       live.current.painter.current=ctx=>{
-        // Render the current pose into the export at its own aspect ratio.
+        const shot=action(live.current.clip??live.current.pose).getClip();
+        const second=live.current.photoSecond??(Math.random()<0.5?1:2);
+        const exportMixer=new THREE.AnimationMixer(model!);
+        const sample=exportMixer.clipAction(shot);
+        sample.play();sample.paused=true;
+        sample.time=Math.min(second,shot.duration);
+        exportMixer.update(0);
         const width=800,height=780, exportCamera=camera.clone();
         exportCamera.top=2.6;exportCamera.bottom=-2.6;
         exportCamera.right=2.6*width/height;exportCamera.left=-exportCamera.right;
@@ -129,7 +145,7 @@ export default function Character(props:Props) {
           renderer.setSize(width,height,false);
           renderer.render(scene,exportCamera);
           ctx.drawImage(renderer.domElement,0,1080-height,width,height);
-        }finally{fit();}
+        }finally{exportMixer.stopAllAction();exportMixer.uncacheRoot(model!);fit();}
       };
       draw(performance.now());live.current.onState('ready');
     }
@@ -141,6 +157,6 @@ export default function Character(props:Props) {
       renderer.domElement.removeEventListener('webglcontextlost',fail);
       renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();
     };
-  },[]);
+  },[props.source]);
   return <div className="character" ref={mount} aria-hidden="true"/>;
 }

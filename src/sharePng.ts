@@ -1,9 +1,6 @@
-import {createClient} from '@supabase/supabase-js';
+import {boothSession} from './boothSession';
 
 import {sharingConfigured,linkLifetime,demoSharing} from './shareConfig';
-const project=import.meta.env.VITE_SUPABASE_URL?.trim();
-const key=import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim();
-let client:ReturnType<typeof createClient>|undefined;
 
 export async function sharePng(blobUrl:string,id:string,signal:AbortSignal){
   const response=await fetch(blobUrl,{signal});
@@ -16,13 +13,9 @@ export async function sharePng(blobUrl:string,id:string,signal:AbortSignal){
     return new URL((await uploaded.json()).url,location.origin).href;
   }
   if(!sharingConfigured)throw new Error('Missing sharing configuration');
-  client??=createClient(project,key,{auth:{persistSession:false,detectSessionInUrl:false}});
-  const existing=await client.auth.getSession();
-  if(existing.error)throw existing.error;
-  const session=existing.data.session??(await client.auth.signInAnonymously()).data.session;
-  if(!session)throw new Error('Anonymous sign-in failed');
-  const object=session.user.id+'/'+id+'.png';
-  const bucket=client.storage.from('booth-photos');
+  const {db,userId}=await boothSession();
+  const object=userId+'/'+id+'.png';
+  const bucket=db.storage.from('booth-photos');
 
   signal.throwIfAborted();
   const uploaded=await bucket.upload(object,png,{contentType:'image/png',upsert:false,cacheControl:'0'});
