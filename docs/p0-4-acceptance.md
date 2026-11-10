@@ -9,7 +9,7 @@
 3. 合成順序為藍米色漸層、去背人物、左下角 V15 小菁鷹目前姿勢。人物等比例完整置中；輸入與 16:9 不同時由背景填滿空間。鏡像只作用於人物。首版以預設漸層作為背景。
 4. 在合照預覽下按「下載 PNG」，取得 1920×1080 的 NTUB-1920x1080.png。可再次拍攝，停止展示會清除頁面上的合照。影像只在瀏覽器內合成。
 
-使用[官方 Selfie Segmenter float16 v1 模型](https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite)，SHA-256 為 `191ac9529ae506ee0beefa6b2c945a172dab9d07d1e802a290a4e4038226658b`。
+使用[官方 Selfie Multiclass 256×256 float32 v1 模型](https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/1/selfie_multiclass_256x256.tflite)，SHA-256 為 `c6748b1253a99067ef71f7e26ca71096cd449baefa8f101900ea23016507e0e0`。
 
 ## 驗收表
 
@@ -25,3 +25,5 @@
 | 行動裝置 | 手機直向與橫向皆能拍攝、查看並儲存橫式成品 | iOS／Android 待驗 |
 
 2026-11-10：分支正式版編譯及既有 12 項自動測試通過。上述 Chrome 測試使用本機網站與公開比讚影像作為模擬攝影機來源。
+
+首輪真人合照出現灰白臉部區塊、髮緣殘影與逆光偏暗；人物畫質待複測。新版以多類別背景機率合成，保留偵測人臉中心的原始像素，強逆光時對人物適度提亮。請重拍並比較眼鏡、鼻口及肩線。

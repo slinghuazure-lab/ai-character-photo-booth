@@ -3,7 +3,8 @@ import type {ImageSegmenter} from '@mediapipe/tasks-vision';
 import type {Language} from './i18n';
 import {composePhoto} from './photo';
 
-export type ShotRequest=RefObject<((frame:HTMLCanvasElement|null)=>void)|null>;
+import type {FaceBox} from './matte';
+export type ShotRequest=RefObject<((frame:HTMLCanvasElement|null,faces:FaceBox[])=>void)|null>;
 export type CharacterPainter=RefObject<((ctx:CanvasRenderingContext2D)=>void)|null>;
 const words={
  'zh-TW':['拍攝合照','準備去背模型…','合成中…','合成失敗，請重試','重新載入去背模型','下載 PNG','合照預覽','請確認所有人仍已同意'],
@@ -26,7 +27,7 @@ export default function PhotoPanel({language,ready,request,painter,mirror}:{
       const files=await FilesetResolver.forVisionTasks(import.meta.env.BASE_URL+'wasm');
       if(generation.current!==epoch)return;
       const task=await ImageSegmenter.createFromOptions(files,{
-        baseOptions:{modelAssetPath:import.meta.env.BASE_URL+'models/selfie_segmenter.tflite'},
+        baseOptions:{modelAssetPath:import.meta.env.BASE_URL+'models/selfie_multiclass.tflite'},
         runningMode:'IMAGE',outputConfidenceMasks:true,outputCategoryMask:false
       });
       if(generation.current!==epoch){task.close();return;}
@@ -43,10 +44,10 @@ export default function PhotoPanel({language,ready,request,painter,mirror}:{
     if(!ready||busy||request.current||!model.current)return;
     const epoch=generation.current;
     setBusy(true);setError(null);setUrl('');
-    request.current=frame=>{
+    request.current=(frame,faces)=>{
       const task=model.current,paint=painter.current;
       if(!frame||!paint||!task){setError(7);setBusy(false);return;}
-      void composePhoto(frame,mirror,task,paint).then(blob=>{
+      void composePhoto(frame,faces,mirror,task,paint).then(blob=>{
         if(generation.current===epoch)setUrl(URL.createObjectURL(blob));
       }).catch(()=>{if(generation.current===epoch)setError(3);})
         .finally(()=>{if(generation.current===epoch)setBusy(false);});

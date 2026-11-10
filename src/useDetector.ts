@@ -80,7 +80,7 @@ export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|nul
                   width:b.width,height:b.height})),hands,now);
                 setConsent(consent);
                 const capture=request.current;
-                if(capture){request.current=null;capture(consent.ready?still:null);}
+                if(capture){request.current=null;capture(consent.ready?still:null,boxes);}
               }catch(error){
                 console.error(error);gesture.close();gesture=undefined;setConsent(emptyConsent);setGestureState('error');
               }
