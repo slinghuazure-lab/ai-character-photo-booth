@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState,type RefObject} from 'react';
 import type {ImageSegmenter} from '@mediapipe/tasks-vision';
 import type {Language} from './i18n';
+import PhotoShare from './PhotoShare';
 import {composePhoto} from './photo';
 
 import type {FaceBox} from './matte';
@@ -99,6 +100,6 @@ export default function PhotoPanel({lighting,language,ready,request,painter,mirr
     }}>{plate?t[10]:recording?t[11]:t[8]}</button>
     {recording&&<span role="status">{t[9]}</span>}
     {error!==null&&<span role="alert">{t[error]}</span>}
-    {url&&<figure><img src={url} alt={t[6]}/><figcaption>{trial&&<p>{staff.review}</p>}<a href={url} download={trial?"NTUB-test-1920x1080.png":"NTUB-1920x1080.png"}>{t[5]} · 1920 × 1080</a></figcaption></figure>}
+    {url&&<figure><img src={url} alt={t[6]}/><figcaption>{trial&&<p>{staff.review}</p>}<a href={url} download={trial?"NTUB-test-1920x1080.png":"NTUB-1920x1080.png"}>{t[5]} · 1920 × 1080</a>{!trial&&<PhotoShare key={url} url={url} language={language}/>}</figcaption></figure>}
   </section>;
 }

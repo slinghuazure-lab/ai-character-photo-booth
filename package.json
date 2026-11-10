@@ -8,18 +8,23 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "typecheck": "tsc -b",
+    "predev:share-demo": "node scripts/prepare-vision.mjs",
+    "dev:share-demo": "vite --mode share-demo --host 127.0.0.1",
     "predev": "node scripts/prepare-vision.mjs",
     "prebuild": "node scripts/prepare-vision.mjs",
     "test": "node --experimental-strip-types --test tests/*.test.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "0.10.22-rc.20250304",
+    "@supabase/supabase-js": "2.119.0",
     "lucide-react": "^0.468.0",
+    "qrcode": "1.5.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "three": "0.180.0"
   },
   "devDependencies": {
+    "@types/qrcode": "1.5.6",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@types/three": "0.180.0",
