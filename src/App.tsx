@@ -4,6 +4,9 @@ import {cameraSupported,cameraErrorMessage,getCameraInfo,listCameras,startCamera
 import {loadSettings,saveSettings,defaults,type ExhibitSettings} from './settings';
 import {t,type MessageKey} from './i18n';
 
+import {AnimationSettings,loadAnimations} from './animationSettings';
+import {useVisitor,type Observation} from './useVisitor';
+import {VisitorOverlay,visitorText} from './VisitorOverlay';
 import PhotoHistory from './PhotoHistory';
 import PhotoPanel,{type CharacterPainter,type ShotRequest} from './PhotoPanel';
 import {useDetector} from './useDetector';
@@ -29,9 +32,26 @@ export default function App(){
   const videoRef=useRef<HTMLVideoElement>(null);
   const request:ShotRequest=useRef(null);
   const painter:CharacterPainter=useRef(null);
-  const {stats,gaze,gestureState,gestureShot,lighting}=useDetector(status==='active',videoRef,request);
+  const observe=useRef<Observation|null>(null);
+  const [animations,setAnimations]=useState(loadAnimations);
+  const [staff,setStaff]=useState(false);
+  const [plate,setPlate]=useState<ImageData|null>(null);
+  const audio=useRef<AudioContext|null>(null);
+  const shutterSound=()=>{
+    const ctx=audio.current;if(!ctx||ctx.state!=='running')return;
+    const buffer=ctx.createBuffer(1,Math.ceil(ctx.sampleRate*.12),ctx.sampleRate);
+    const data=buffer.getChannelData(0);
+    for(let i=0;i<data.length;i++){const time=i/ctx.sampleRate;data[i]=(Math.random()*2-1)*.42*(Math.exp(-time*85)+(time>.05?Math.exp(-(time-.05)*95)*.65:0));}
+    const source=ctx.createBufferSource();source.buffer=buffer;source.connect(ctx.destination);source.start();
+  };
+  const {stats,gaze,gestureState,gestureShot,lighting}=useDetector(status==='active',videoRef,request,observe);
   const labels=exhibitLabels(settings.language);
   const [renderer,setRenderer]=useState<'ready'|'error'|'loading'>('loading');
+  const exhibition=useVisitor({active:status==='active'&&!staff,ready:renderer==='ready'&&gestureState==='running',
+    animations,mirror:settings.mirror,request,painter,observe,sound:shutterSound,plate});
+  const guest=status==='active'&&!staff;
+  const visibleCamera=staff||exhibition.view.phase==='countdown';
+  const guestText=visitorText(settings.language);
   const [cue,setCue]=useState<{kind:Cue;at:number}>({kind:'photo',at:-Infinity});
   const [action,setAction]=useState<Cue|null>(null);
   const timer=useRef(0);
@@ -53,6 +73,8 @@ export default function App(){
   useEffect(()=>{void refreshDevices();const handle=()=>{void refreshDevices();};navigator.mediaDevices?.addEventListener?.('devicechange',handle);return()=>navigator.mediaDevices?.removeEventListener?.('devicechange',handle);},[refreshDevices]);
   const stop=useCallback(()=>{opRef.current++;stopCamera(streamRef.current);streamRef.current=null;if(videoRef.current)videoRef.current.srcObject=null;setInfo(null);setFps(0);setStatus('ready');setError(null);},[]);
   const start=useCallback(async(override?:Partial<ExhibitSettings>)=>{
+    setPlate(null);
+    try{audio.current??=new AudioContext();void audio.current.resume().catch(()=>{});}catch{/* Audio unavailable */}
     const op=++opRef.current;
     stopCamera(streamRef.current);streamRef.current=null;
     if(videoRef.current)videoRef.current.srcObject=null;
@@ -77,13 +99,13 @@ export default function App(){
   const toggleFullScreen=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{/* Fullscreen is optional */}};
   return <div className="app-shell">
     <header className="topbar"><div className="brand"><span className="brand-icon"><Camera size={23}/></span><div><strong>{l('title')}</strong><small>{l('subtitle')}</small></div></div><div className="header-actions"><span className="version">P0-6</span><select aria-label={l('language')} value={settings.language} onChange={e=>update({language:e.target.value as ExhibitSettings['language']})}><option value="zh-TW">繁體中文</option><option value="en">English</option><option value="ja">日本語</option></select></div></header>
-    <main className="dashboard"><section className="stage-panel"><div className="stage-toolbar"><span className={`status-chip ${status}`}><span className="dot"/>{l(status)}</span><button className="icon-button" onClick={()=>void toggleFullScreen()} title={fullscreen?l('exitFullScreen'):l('fullScreen')} aria-label={fullscreen?l('exitFullScreen'):l('fullScreen')}>{fullscreen?<Minimize size={19}/>:<Maximize size={19}/>}</button></div>
-      <div className="stage"><video ref={videoRef} playsInline muted autoPlay className={settings.mirror?'mirrored':''} aria-label={l('camera')}/>{status!=='active'&&<div className="empty-state"><div className="empty-icon">{status==='error'?<CameraOff size={43}/>:<Camera size={43}/>}</div><h2>{status==='error'?l('cameraError'):status==='loading'?l('loading'):l('noCamera')}</h2><p>{status==='error'?l(error||'cameraError'):l('permission')}</p></div>}{status==='active'&&<CharacterBoundary onError={()=>setRenderer('error')}><Suspense fallback={null}><Character painter={painter} tracking={stats.tracking} gaze={gaze} mirror={settings.mirror} cue={cue} onState={setRenderer}/></Suspense></CharacterBoundary>}{status==='active'&&<div className="preview-label"><span className="live-dot"/> LIVE · {info?.width}×{info?.height}</div>}</div>
-      {status==='active'&&<PhotoPanel gestureShot={gestureShot} lighting={lighting} video={videoRef} empty={stats.state==='running' && stats.count===0 && !stats.tracking} language={settings.language} mirror={settings.mirror}
+    <main className="dashboard exhibit-dashboard"><section className="stage-panel"><div className="stage-toolbar"><span className={`status-chip ${status}`}><span className="dot"/>{l(status)}</span><button className="icon-button" onClick={()=>void toggleFullScreen()} title={fullscreen?l('exitFullScreen'):l('fullScreen')} aria-label={fullscreen?l('exitFullScreen'):l('fullScreen')}>{fullscreen?<Minimize size={19}/>:<Maximize size={19}/>}</button></div>
+      <div className={'stage '+(guest?'visitor-stage ':'')+(guest&&!visibleCamera?'character-stage':'')} data-phase={guest?exhibition.view.phase:undefined} data-animation={guest?exhibition.view.clip:undefined}><video ref={videoRef} playsInline muted autoPlay className={settings.mirror?'mirrored':''} aria-label={l('camera')}/>{status!=='active'&&<div className="empty-state"><div className="empty-icon">{status==='error'?<CameraOff size={43}/>:<Camera size={43}/>}</div><h2>{status==='error'?l('cameraError'):status==='loading'?l('loading'):l('noCamera')}</h2><p>{status==='error'?l(error||'cameraError'):l('permission')}</p></div>}{status==='active'&&<CharacterBoundary onError={()=>setRenderer('error')}><Suspense fallback={null}><Character clip={guest?exhibition.view.clip:undefined} painter={painter} tracking={stats.tracking} gaze={gaze} mirror={settings.mirror} cue={cue} onState={setRenderer}/></Suspense></CharacterBoundary>}{guest&&<VisitorOverlay view={exhibition.view} language={settings.language} reset={exhibition.reset}/>} {status==='active'&&visibleCamera&&<div className="preview-label"><span className="live-dot"/> LIVE · {info?.width}×{info?.height}</div>}</div>
+      {status==='active'&&staff&&<PhotoPanel plate={plate} setPlate={setPlate} gestureShot={gestureShot} lighting={lighting} video={videoRef} empty={stats.state==='running' && stats.count===0 && !stats.tracking} language={settings.language} mirror={settings.mirror}
         ready={stats.state==='running' && renderer==='ready'} request={request} painter={painter}/>}
-      <div className="stage-footer"><div className="privacy"><ShieldCheck size={17}/><span>{l('privacy')}</span></div><div className="controls">{status==='active'&&(['left','right','photo'] as const).map(kind=><button key={kind} disabled={renderer!=='ready'} className="subtle-button" onClick={()=>play(kind)}>{labels[kind]}</button>)}{status==='active'?<button className="danger-button" onClick={stop}><CameraOff size={18}/>{l('stop')}</button>:<button className="primary-button" disabled={status==='loading'} onClick={()=>void start()}><Camera size={18}/>{status==='error'?l('retry'):l('start')}</button>}</div></div>
+      <div className="stage-footer"><div className="privacy"><ShieldCheck size={17}/><span>{l('privacy')}</span></div><div className="controls">{status==='active'&&staff&&(['left','right','photo'] as const).map(kind=><button key={kind} disabled={renderer!=='ready'} className="subtle-button" onClick={()=>play(kind)}>{labels[kind]}</button>)}{status==='active'?<button className="danger-button" onClick={stop}><CameraOff size={18}/>{l('stop')}</button>:<button className="primary-button" disabled={status==='loading'} onClick={()=>void start()}><Camera size={18}/>{status==='error'?l('retry'):l('start')}</button>}</div></div>
     </section>
-    <aside className="sidebar"><section className="panel"><div className="panel-title"><Settings2 size={19}/><h2>{l('camera')}</h2></div><label htmlFor="camera-select">{l('cameraHelp')}</label><select id="camera-select" value={devices.some(d=>d.deviceId===settings.deviceId)?settings.deviceId:''} onChange={e=>switchCamera(e.target.value)}><option value="">{l('auto')}</option>{devices.map((d,i)=><option key={d.deviceId||i} value={d.deviceId}>{d.label}</option>)}</select><label htmlFor="resolution-select">{l('resolution')}</label><select id="resolution-select" value={settings.resolution} onChange={e=>switchResolution(e.target.value as Resolution)}><option value="auto">{l('auto')} (720p)</option><option value="640">640 × 480</option><option value="1280">1280 × 720</option><option value="1920">1920 × 1080</option></select><p className="hint">{l('resolutionNote')}</p><label className="switch-line"><input type="checkbox" checked={settings.mirror} onChange={e=>update({mirror:e.target.checked})}/><span>{l('mirror')}</span></label><button className="subtle-button" onClick={()=>{setSettings(defaults);stop();}}><RotateCcw size={16}/>{l('reset')}</button></section>
+    <details className="exhibit-settings"><summary>{guestText.settings}</summary><aside className="sidebar"><AnimationSettings language={settings.language} value={animations} onChange={setAnimations}/><button className="subtle-button" onClick={()=>setStaff(v=>!v)}>{staff?guestText.exit:guestText.staff}</button><section className="panel"><div className="panel-title"><Settings2 size={19}/><h2>{l('camera')}</h2></div><label htmlFor="camera-select">{l('cameraHelp')}</label><select id="camera-select" value={devices.some(d=>d.deviceId===settings.deviceId)?settings.deviceId:''} onChange={e=>switchCamera(e.target.value)}><option value="">{l('auto')}</option>{devices.map((d,i)=><option key={d.deviceId||i} value={d.deviceId}>{d.label}</option>)}</select><label htmlFor="resolution-select">{l('resolution')}</label><select id="resolution-select" value={settings.resolution} onChange={e=>switchResolution(e.target.value as Resolution)}><option value="auto">{l('auto')} (720p)</option><option value="640">640 × 480</option><option value="1280">1280 × 720</option><option value="1920">1920 × 1080</option></select><p className="hint">{l('resolutionNote')}</p><label className="switch-line"><input type="checkbox" checked={settings.mirror} onChange={e=>update({mirror:e.target.checked})}/><span>{l('mirror')}</span></label><button className="subtle-button" onClick={()=>{setSettings(defaults);stop();}}><RotateCcw size={16}/>{l('reset')}</button></section>
     <section className="panel"><div className="panel-title"><Activity size={19}/><h2>{l('debug')}</h2></div><button className="subtle-button" onClick={()=>update({showDebug:!settings.showDebug})}>{settings.showDebug?l('hideDebug'):l('showDebug')}</button>{settings.showDebug&&<dl className="debug-list"><div><dt>{l('status')}</dt><dd>{l(status)}</dd></div><div><dt>{l('device')}</dt><dd className="truncate" title={info?.deviceId||'-'}>{info?.deviceId?.slice(0,12)||'-'}</dd></div><div><dt>{l('requested')}</dt><dd>{settings.resolution==='auto'?'Auto':settings.resolution+'p'}</dd></div><div><dt>{l('actual')}</dt><dd>{info?`${info.width} × ${info.height}`:'-'}</dd></div><div><dt>{l('fps')}</dt><dd>{status==='active'?fps:'-'}</dd></div><div><dt>{l('viewport')}</dt><dd>{viewport}</dd></div><div><dt>{l('secure')}</dt><dd>{window.isSecureContext?l('yes'):l('no')}</dd></div>{[
       [labels.detector,labels[stats.state]], [labels.handDetector,labels[gestureState]], [labels.character,labels[status==='active'?renderer:'off']],
       [labels.faces,stats.state==='running'?stats.count:'—'],
@@ -91,6 +113,6 @@ export default function App(){
       [labels.speed,stats.state==='running'?stats.hz+' Hz / '+stats.ms+' ms':'—'],
       [labels.mode,status==='active' && renderer==='ready'?labels[action??(stats.tracking?'tracking':'idle')]:'—']
     ].map(([key,value])=><div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>}{(stats.state==='error'||renderer==='error')&&<p className="hint" role="alert">{stats.state==='error'?labels.detector:labels.character} · {labels.error}. {labels.help} {stats.detail}</p>}</section>
-    <PhotoHistory language={settings.language}/></aside></main><footer className="footer"><Monitor size={15}/> AI Interactive Character Photo Booth · P0-6 <Languages size={15}/></footer>
+    <PhotoHistory language={settings.language}/></aside></details></main><footer className="footer"><Monitor size={15}/> AI Interactive Character Photo Booth · P0-6 <Languages size={15}/></footer>
   </div>;
 }

@@ -4,8 +4,9 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {eyeRotation,type Point} from './tracking';
 
 import type {CharacterPainter} from './PhotoPanel';
+import type {Clip} from './animationSettings';
 export type Cue='photo'|'left'|'right';
-type Props={painter:CharacterPainter; gaze:RefObject<Point>; tracking:boolean; mirror:boolean; cue:{kind:Cue;at:number}; onState:(value:'ready'|'error')=>void};
+type Props={clip?:Clip;painter:CharacterPainter; gaze:RefObject<Point>; tracking:boolean; mirror:boolean; cue:{kind:Cue;at:number}; onState:(value:'ready'|'error')=>void};
 const modelUrl=import.meta.env.BASE_URL+'models/NTUB_Doctoral_Owl_6_Actions.glb';
 
 function releaseModel(root:THREE.Object3D) {
@@ -100,7 +101,10 @@ export default function Character(props:Props) {
         if(!clip)throw new Error('Missing V15 animation: '+name);
         return animator.clipAction(clip);
       };
-      const stand=action('Idle_03_Stand_Look').play();
+      let stand=action('Idle_03_Stand_Look').play();
+      let activeClip:Clip|undefined;
+      const arm=model.getObjectByProperty('name','upper_armR')??model.getObjectByName('upper_arm.R');
+      const animatedArm=new THREE.Quaternion();let waved=false;
       const pose=action('Gesture_YA').setLoop(THREE.LoopOnce,1);
       pose.clampWhenFinished=true;
       animator.addEventListener('finished',()=>{
@@ -109,13 +113,23 @@ export default function Character(props:Props) {
       let last=performance.now(), playedAt=-Infinity;
       function draw(now:number){
         const {cue}=live.current;
-        if(cue.kind==='photo' && cue.at>playedAt){
+        const clip=live.current.clip;
+        if(clip!==activeClip){
+          const next=action(clip==='Hello'||!clip?'Idle_03_Stand_Look':clip);
+          next.setLoop(THREE.LoopRepeat,Infinity);
+          if(next!==stand){next.reset().setEffectiveWeight(1).play();stand.crossFadeTo(next,0.35,false);stand=next;}
+          activeClip=clip;
+        }
+        if(!clip && cue.kind==='photo' && cue.at>playedAt){
           playedAt=cue.at;
           pose.reset().setEffectiveWeight(1).play();
           if(stand.isRunning())stand.crossFadeTo(pose,0.2,false);
         }
         eyes.forEach(eye=>eye.restore());
+        if(arm&&waved)arm.quaternion.copy(animatedArm);
         animator.update(Math.max(0,(now-last)/1000));last=now;
+        waved=clip==='Hello' && !!arm;
+        if(arm&&waved){animatedArm.copy(arm.quaternion);arm.rotateZ(-0.72+0.24*Math.sin(now/160));}
         eyes.forEach(eye=>eye.apply(live.current,now));
         renderer.render(scene,camera);raf=requestAnimationFrame(draw);
       }

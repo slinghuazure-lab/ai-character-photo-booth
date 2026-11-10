@@ -20,15 +20,15 @@ const staffCopy={
  en:{waiting:'Stand at the photo position and face the camera',checking:'Checking face lighting…',ok:'Face lighting looks usable',dark:'Face remains dark. Add soft front light or move closer to a light.',backlit:'Backlit face. Turn toward the light or move the bright window out of the background.',trial:'Set up venue',again:'Set up a new venue',saved:'Venue setup completed on this device',cancel:'Cancel setup',guide:'Stand in the visitor spot and give a thumbs-up for one second. Check eyes, cheeks and collar edges.',take:'Take test shot',done:'Accept test and finish setup',review:'Test preview: inspect lighting and cutout edges. Adjust and retake as needed.'},
  ja:{waiting:'撮影位置でカメラに顔を向けてください',checking:'顔の明るさを確認中…',ok:'顔の明るさは良好です',dark:'顔が暗い状態です。正面から柔らかい光を足してください',backlit:'逆光です。光の方を向くか、明るい窓を背にしない位置に移動してください',trial:'会場を設定',again:'会場を再設定',saved:'この端末の会場設定は完了しました',cancel:'設定をキャンセル',guide:'撮影位置で親指を1秒間立ててください。目、両頬、襟の輪郭を確認します。',take:'テスト写真を撮る',done:'写真を確認して設定完了',review:'テスト写真で顔の明るさと輪郭を確認し、照明を調整して再撮影できます。'}
 };
-export default function PhotoPanel({gestureShot,lighting,language,ready,request,painter,mirror,video,empty}:{
-  gestureShot:number;lighting:Lighting;language:Language;ready:boolean;request:ShotRequest;painter:CharacterPainter;mirror:boolean;video:RefObject<HTMLVideoElement|null>;empty:boolean;
+export default function PhotoPanel({plate,setPlate,gestureShot,lighting,language,ready,request,painter,mirror,video,empty}:{
+  plate:ImageData|null;setPlate:(p:ImageData|null)=>void;gestureShot:number;lighting:Lighting;language:Language;ready:boolean;request:ShotRequest;painter:CharacterPainter;mirror:boolean;video:RefObject<HTMLVideoElement|null>;empty:boolean;
 }){
   const t=words[language], model=useRef<ImageSegmenter|null>(null);
   const [status,setStatus]=useState<'loading'|'ready'|'error'>('loading');
   const [retry,setRetry]=useState(0),[busy,setBusy]=useState(false);
   const [error,setError]=useState<number|null>(null),[url,setUrl]=useState('');
   const [record,setRecord]=useState<PhotoRecord|null>(null);
-  const [trial,setTrial]=useState(false);
+  const [trial,setTrial]=useState(true);
   const venueKey='ntub-photo-venue-setup-v1';
   const [configured,setConfigured]=useState(()=>{
     try{return localStorage.getItem(venueKey)==='done';}catch{return false;}
@@ -47,7 +47,7 @@ export default function PhotoPanel({gestureShot,lighting,language,ready,request,
     en:['Press capture or hold one thumbs-up for 1 second to start a 3-second countdown','Taking photo in','Cancel countdown'],
     ja:['撮影ボタンまたは1人が親指を1秒立てると、3秒後に撮影します','撮影まで','カウントを中止']
   }[language];
-  const [plate,setPlate]=useState<ImageData|null>(null);
+
   const [recording,setRecording]=useState(false);
   useEffect(()=>{
     if(!recording || !empty)return;

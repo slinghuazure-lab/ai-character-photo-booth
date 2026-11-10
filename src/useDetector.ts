@@ -4,10 +4,13 @@ import {TargetTracker} from './tracking';
 import {ThumbShutter} from './thumbShutter';
 import type {ShotRequest} from './PhotoPanel';
 import {assessLighting,LightingMonitor,type Lighting} from './lighting';
+import {sceneFaces} from './sceneFaces';
+import type {Observation} from './useVisitor';
+import type {Point} from './visitorFlow';
 type GestureState='off'|'loading'|'running'|'error';
 const initial={state:'off', count:0, tracking:false, hz:0, ms:0, point:{x:0.5,y:0.5}, detail:''} as const;
 type Stats={state:'off'|'loading'|'running'|'error'; count:number; tracking:boolean; hz:number; ms:number; point:{x:number;y:number};detail:string};
-export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|null>,request:ShotRequest) {
+export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|null>,request:ShotRequest,observe:RefObject<Observation|null>) {
   const [stats,setStats]=useState<Stats>(initial);
   const [gestureShot,setGestureShot]=useState(0);
   const [gestureState,setGestureState]=useState<GestureState>('off');
@@ -20,6 +23,7 @@ export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|nul
     let faceFailed=false;
     const shutter=new ThumbShutter();
     const monitor=new LightingMonitor();
+    const tile=document.createElement('canvas');
     let lastLight=-Infinity;
     const meter=document.createElement('canvas');meter.width=96;meter.height=64;
     const ctx=meter.getContext('2d',{willReadFrequently:true});
@@ -70,13 +74,11 @@ export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|nul
               const ctx=still.getContext('2d');
               if(ctx)ctx.drawImage(el,0,0);else still=null;
             }
-            const result=task.detectForVideo(still??el,now);
+            const boxes=sceneFaces(task,still??el,el.videoWidth,el.videoHeight,now,tile);
             const ms=Math.round(performance.now()-start);
-            const boxes=result.detections.flatMap(d=>d.boundingBox?[d.boundingBox]:[]);
+
             const frame=tracker.step(boxes,el.videoWidth,el.videoHeight,now);
-            if(request.current){
-              const capture=request.current;request.current=null;capture(still,boxes);
-            }
+            let thumbsInFrame:Point[]|null=null;
             if(ctx && now-lastLight>=300){
               lastLight=now;
               let reading=null;
@@ -97,11 +99,14 @@ export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|nul
                   const label=result.gestures[i]?.[0];
                   return points[9] && label?.categoryName==='Thumb_Up' && label.score>=0.5?[points[9]]:[];
                 });
+                thumbsInFrame=thumbs.map(p=>({x:p.x*el.videoWidth,y:p.y*el.videoHeight}));
                 if(shutter.step(thumbs,now))setGestureShot(n=>n+1);
               }catch(error){
                 console.error(error);gesture.close();gesture=undefined;setGestureState('error');
               }
             }
+            observe.current?.(boxes,thumbsInFrame,now);
+            if(request.current && still){const capture=request.current;request.current=null;capture(still,boxes);}
             frames++;
             if(now-windowStart>=1000) {hz=Math.round(frames*1000/(now-windowStart)); frames=0;windowStart=now;}
             gaze.current=frame.point;
@@ -109,7 +114,7 @@ export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|nul
           } catch(error) {fail(error);return;}
         }
         if(lastFresh && now-lastFresh>450){
-          setLighting(monitor.update(null,now));shutter.step([],now);lastFresh=0;
+          observe.current?.([],null,now);setLighting(monitor.update(null,now));shutter.step([],now);lastFresh=0;
         }
         raf=requestAnimationFrame(tick);
       };
@@ -117,6 +122,6 @@ export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|nul
     }
     void start().catch(fail);
     return ()=>{disposed=true;cancelAnimationFrame(raf);gesture?.close();detector?.close();};
-  },[active,video,request]);
+  },[active,video,request,observe]);
   return {stats,gaze,gestureState,gestureShot,lighting};
 }
