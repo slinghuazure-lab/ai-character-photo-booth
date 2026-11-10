@@ -7,7 +7,7 @@ import {eyeRotation,type Point} from './tracking';
 import type {CharacterPainter} from './PhotoPanel';
 import type {Clip} from './animationSettings';
 export type Cue='photo'|'left'|'right';
-type Props={source:string|null;idle:Clip;pose:Clip;clip?:Clip;photoSecond?:number;painter:CharacterPainter; gaze:RefObject<Point>; tracking:boolean; mirror:boolean; cue:{kind:Cue;at:number}; onState:(value:'ready'|'error')=>void};
+type Props={composing:boolean;onPoseComplete:()=>void;source:string|null;idle:Clip;pose:Clip;clip?:Clip;photoSecond?:number;painter:CharacterPainter; gaze:RefObject<Point>; tracking:boolean; mirror:boolean; cue:{kind:Cue;at:number}; onState:(value:'ready'|'error')=>void};
 const modelUrl=import.meta.env.BASE_URL+'models/NTUB_Doctoral_Owl_v15R5_10_Actions.glb';
 
 function bindEye(root:THREE.Object3D,side:'left'|'right') {
@@ -98,7 +98,7 @@ export default function Character(props:Props) {
       const idle=()=>custom?live.current.idle:'Idle_03_Stand_Look';
       let stand=action(idle()).play();
       let activeClip:Clip|undefined,activeSecond:number|undefined;
-      let clipStarted=0;
+      let clipStarted=0,composing=false,reportedEnd=false;
       let pose=action(custom?live.current.pose:'Gesture_YA');
       pose.clampWhenFinished=true;
       animator.addEventListener('finished',()=>{
@@ -109,7 +109,9 @@ export default function Character(props:Props) {
         const {cue}=live.current;
         const clip=live.current.clip??idle();
         const second=live.current.photoSecond;
-        if(clip!==activeClip || second!==activeSecond){
+        const phaseChanged=composing!==live.current.composing;
+        if(clip!==activeClip || second!==activeSecond || phaseChanged){
+          composing=live.current.composing;reportedEnd=false;
           stand.paused=false;
           const next=action(clip);
           next.setLoop(THREE.LoopRepeat,Infinity);
@@ -124,10 +126,17 @@ export default function Character(props:Props) {
           if(stand!==pose&&stand.isRunning())stand.crossFadeTo(pose,0.2,false);
         }
         eyes.forEach(eye=>eye?.restore());
-        if(second!==undefined)stand.time=Math.min((now-clipStarted)/1000,second,stand.getClip().duration);
+        if(composing){
+          const advance=phaseChanged?0:Math.min(0.1,Math.max(0,(now-last)/1000));
+          stand.time=Math.min(stand.getClip().duration,stand.time+advance);
+        }else if(second!==undefined)stand.time=Math.min((now-clipStarted)/1000,second,stand.getClip().duration);
         animator.update(Math.max(0,(now-last)/1000));last=now;
         eyes.forEach(eye=>eye?.apply(live.current,now));
-        renderer.render(scene,camera);raf=requestAnimationFrame(draw);
+        renderer.render(scene,camera);
+        if(composing && !reportedEnd && stand.time>=stand.getClip().duration){
+          reportedEnd=true;live.current.onPoseComplete();
+        }
+        raf=requestAnimationFrame(draw);
       }
       live.current.painter.current=ctx=>{
         const shot=action(live.current.clip??live.current.pose).getClip();
