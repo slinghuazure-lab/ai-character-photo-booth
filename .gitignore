@@ -2,3 +2,6 @@ node_modules/
 dist/
 *.tsbuildinfo
 public/wasm/
+
+.env.local
+.env.*.local

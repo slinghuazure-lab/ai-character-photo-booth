@@ -7,3 +7,5 @@
 .photo-panel{background:#20324d;padding:12px 18px}.photo-panel figure{margin:14px 0 0}.photo-panel img{display:block;width:100%;height:auto}.photo-panel figcaption{padding:10px 0}.photo-panel a{color:#c6e4ff}
 
 .lighting-status{font-size:14px;margin:0 0 10px;color:#c6d5e9}.lighting-status[data-light=dark],.lighting-status[data-light=backlit]{color:#ffe0a1}.photo-panel button{margin:4px 8px 4px 0}
+
+.photo-share{margin-top:12px}.photo-panel .photo-share img{width:min(100%,320px);height:auto;margin-bottom:8px}
