@@ -18,6 +18,7 @@ export function useVisitor(options:Options){
   const live=useRef(options);
   live.current=options;
   const [view,setView]=useState<View>(initial);
+  const poseComplete=useRef(false);
   const reset=useRef<()=>void>(()=>{});
   useEffect(()=>{
     if(!options.active){setView(initial);return;}
@@ -72,6 +73,7 @@ export function useVisitor(options:Options){
       }
       const people=flow.people,selected=flow.selected;
       const taken=Date.now();live.current.sound();
+      poseComplete.current=false;
       flow.phase='processing';publish(performance.now());
       let record:ReturnType<typeof newPhotoRecord>|undefined;
       let stage='model';
@@ -99,7 +101,7 @@ export function useVisitor(options:Options){
         const image=await qrCode.toDataURL(signed,{width:420,margin:4,errorCorrectionLevel:'M'});
         if(!valid())return;
         writeRecord({...record,shareStatus:'shared'});
-        qr=image;link=signed;flow.phase='qr';qrUntil=performance.now()+10_000;
+        qr=image;link=signed;
       }catch(e){
         if(!valid())return;
         if(e instanceof SeparationError){retrySeparation(e.reason==='pose'?'pose':'separation');}
@@ -131,6 +133,9 @@ export function useVisitor(options:Options){
       }
       if(shotPending && flow.phase!=='countdown'){options.request.current=null;shotPending=false;}
       if(shotPending && now-requestedAt>2500){options.request.current=null;shotPending=false;if(flow.phase==='countdown'){flow.phase='error';error='camera';}}
+      if(flow.phase==='processing' && qr && (poseComplete.current || !live.current.ready)){
+        flow.phase='qr';qrUntil=now+10_000;
+      }
       if(flow.phase==='qr' && now>=qrUntil)resetFlow();
       publish(now);
     },100);
@@ -142,5 +147,5 @@ export function useVisitor(options:Options){
       options.request.current=null;segmenter?.close();pose?.close();if(photo)URL.revokeObjectURL(photo);
     };
   },[options.active,options.observe,options.request,options.assetKey]);
-  return {view,reset:()=>reset.current()};
+  return {view,onPoseComplete:()=>{poseComplete.current=true;},reset:()=>reset.current()};
 }
