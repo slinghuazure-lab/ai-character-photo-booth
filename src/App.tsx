@@ -1,5 +1,6 @@
+import BackgroundSettings from './BackgroundSettings';
 import {Component,lazy,Suspense,type ReactNode,useCallback,useEffect,useRef,useState} from 'react';
-import {Camera,CameraOff,Settings2,Activity,Maximize,Minimize,ShieldCheck,Monitor,Languages,RotateCcw} from 'lucide-react';
+import {Camera,CameraOff,Settings2,Activity,Maximize,Minimize,ShieldCheck,Monitor,RotateCcw} from 'lucide-react';
 import {cameraSupported,cameraErrorMessage,getCameraInfo,listCameras,startCamera,stopCamera,type CameraDevice,type CameraInfo,type Resolution} from './camera';
 import {loadSettings,saveSettings,defaults,type ExhibitSettings} from './settings';
 import {t,type MessageKey} from './i18n';
@@ -29,10 +30,12 @@ export default function App(){
   const [info,setInfo]=useState<CameraInfo|null>(null);
   const [fps,setFps]=useState(0);
   const [viewport,setViewport]=useState(`${window.innerWidth} × ${window.innerHeight}`);
+  const stagePanel=useRef<HTMLElement>(null);
   const [fullscreen,setFullscreen]=useState(false);
   const videoRef=useRef<HTMLVideoElement>(null);
   const request:ShotRequest=useRef(null);
   const painter:CharacterPainter=useRef(null);
+  const captureLock=useRef<import("./matte").FaceBox[]|null>(null);
   const observe=useRef<Observation|null>(null);
   const character=useCharacterModel();
   const animations=character.model.slots;
@@ -47,11 +50,11 @@ export default function App(){
     for(let i=0;i<data.length;i++){const time=i/ctx.sampleRate;data[i]=(Math.random()*2-1)*.42*(Math.exp(-time*85)+(time>.05?Math.exp(-(time-.05)*95)*.65:0));}
     const source=ctx.createBufferSource();source.buffer=buffer;source.connect(ctx.destination);source.start();
   };
-  const {stats,gaze,gestureState,gestureShot,lighting}=useDetector(status==='active',videoRef,request,observe);
+  const {stats,gaze,gestureState,gestureShot,lighting}=useDetector(status==='active',videoRef,request,observe,captureLock);
   const labels=exhibitLabels(settings.language);
   const [renderer,setRenderer]=useState<'ready'|'error'|'loading'>('loading');
   const exhibition=useVisitor({active:status==='active'&&!staff,ready:renderer==='ready'&&gestureState==='running',
-    animations,assetKey:character.model.key,mirror:settings.mirror,request,painter,observe,sound:shutterSound,plate});
+    animations,assetKey:character.model.key,mirror:settings.mirror,request,painter,observe,captureLock,sound:shutterSound,plate});
   useEffect(()=>setRenderer('loading'),[character.model.key]);
   const guest=status==='active'&&!staff;
   const visibleCamera=staff||exhibition.view.phase==='countdown';
@@ -102,15 +105,15 @@ export default function App(){
     }catch(e){if(op===opRef.current){setStatus('error');setError(cameraErrorMessage(e));}}
   },[refreshDevices]);
   useEffect(()=>{const handler=()=>setViewport(`${window.innerWidth} × ${window.innerHeight}`);window.addEventListener('resize',handler);return()=>window.removeEventListener('resize',handler);},[]);
-  useEffect(()=>{const handler=()=>setFullscreen(!!document.fullscreenElement);document.addEventListener('fullscreenchange',handler);return()=>document.removeEventListener('fullscreenchange',handler);},[]);
+  useEffect(()=>{const handler=()=>setFullscreen(document.fullscreenElement===stagePanel.current);document.addEventListener('fullscreenchange',handler);return()=>document.removeEventListener('fullscreenchange',handler);},[]);
   useEffect(()=>{if(status!=='active')return;let raf=0;let last=performance.now();let frames=0;const tick=(now:number)=>{frames++;if(now-last>=1000){setFps(Math.round(frames*1000/(now-last)));frames=0;last=now;}raf=requestAnimationFrame(tick);};raf=requestAnimationFrame(tick);return()=>cancelAnimationFrame(raf);},[status]);
   useEffect(()=>()=>{opRef.current++;stopCamera(streamRef.current);},[]);
   const switchCamera=(deviceId:string)=>{update({deviceId});if(status==='active'||status==='loading')void start({deviceId});};
   const switchResolution=(resolution:Resolution)=>{update({resolution});if(status==='active'||status==='loading')void start({resolution});};
-  const toggleFullScreen=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{/* Fullscreen is optional */}};
+  const toggleFullScreen=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await stagePanel.current?.requestFullscreen();}catch{/* Fullscreen is optional */}};
   return <div className="app-shell">
     <header className="topbar"><div className="brand"><span className="brand-icon"><Camera size={23}/></span><div><strong>{l('title')}</strong><small>{l('subtitle')}</small></div></div><div className="header-actions"><span className="version">P0-6</span><select aria-label={l('language')} value={settings.language} onChange={e=>update({language:e.target.value as ExhibitSettings['language']})}><option value="zh-TW">繁體中文</option><option value="en">English</option><option value="ja">日本語</option></select></div></header>
-    <main className="dashboard exhibit-dashboard"><section className="stage-panel"><div className="stage-toolbar"><span className={`status-chip ${status}`}><span className="dot"/>{l(status)}</span><button className="icon-button" onClick={()=>void toggleFullScreen()} title={fullscreen?l('exitFullScreen'):l('fullScreen')} aria-label={fullscreen?l('exitFullScreen'):l('fullScreen')}>{fullscreen?<Minimize size={19}/>:<Maximize size={19}/>}</button></div>
+    <main className="dashboard exhibit-dashboard"><section ref={stagePanel} className="stage-panel"><div className="stage-toolbar"><span className={`status-chip ${status}`}><span className="dot"/>{l(status)}</span><button className="icon-button" onClick={()=>void toggleFullScreen()} title={fullscreen?l('exitFullScreen'):l('fullScreen')} aria-label={fullscreen?l('exitFullScreen'):l('fullScreen')}>{fullscreen?<Minimize size={19}/>:<Maximize size={19}/>}</button></div>
       <div className={'stage '+(guest?'visitor-stage ':'')+(guest&&!visibleCamera?'character-stage':'')} data-check-camera={checking&&inspectCamera} data-phase={guest?exhibition.view.phase:undefined} data-animation={guest?exhibition.view.clip:undefined}><video ref={videoRef} playsInline muted autoPlay className={settings.mirror?'mirrored':''} aria-label={l('camera')}/>{status!=='active'&&<div className="empty-state"><div className="empty-icon">{status==='error'?<CameraOff size={43}/>:<Camera size={43}/>}</div><h2>{status==='error'?l('cameraError'):status==='loading'?l('loading'):l('noCamera')}</h2><p>{status==='error'?l(error||'cameraError'):l('permission')}</p></div>}{status==='active'&&<CharacterBoundary onError={()=>setRenderer('error')}><Suspense fallback={null}><Character source={character.model.source} idle={animations.idle[0]} pose={animations.photo[0]} clip={guest?exhibition.view.clip:undefined} painter={painter} tracking={stats.tracking} gaze={gaze} mirror={settings.mirror} cue={cue} onState={setRenderer}/></Suspense></CharacterBoundary>}{guest&&<VisitorOverlay custom={!!character.model.source} view={exhibition.view} language={settings.language} reset={exhibition.reset}/>} {status==='active'&&visibleCamera&&<div className="preview-label"><span className="live-dot"/> LIVE · {info?.width}×{info?.height}</div>}</div>
       {checking&&<div className="camera-check"><span>{stats.state==='running'?cameraHelp[2]+' '+stats.count:stats.state==='error'?cameraHelp[1]:cameraHelp[0]}</span>
         <button className="subtle-button" aria-pressed={inspectCamera} onClick={()=>setInspectCamera(v=>!v)}>{cameraHelp[inspectCamera?4:3]}</button></div>}
@@ -127,6 +130,6 @@ export default function App(){
       [labels.speed,stats.state==='running'?stats.hz+' Hz / '+stats.ms+' ms':'—'],
       [labels.mode,status==='active' && renderer==='ready'?labels[action??(stats.tracking?'tracking':'idle')]:'—']
     ].map(([key,value])=><div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>}{(stats.state==='error'||renderer==='error')&&<p className="hint" role="alert">{stats.state==='error'?labels.detector:labels.character} · {labels.error}. {labels.help} {stats.detail}</p>}</section>
-    <PhotoHistory language={settings.language}/></aside></details></main><footer className="footer"><Monitor size={15}/> AI Interactive Character Photo Booth · P0-6 <Languages size={15}/></footer>
+    <BackgroundSettings language={settings.language}/><PhotoHistory language={settings.language}/></aside></details></main><footer className="footer"><Monitor size={15}/> <span>NTUB DMD [AI Interactive Character Photo Booth] · P0-6</span><a href="mailto:slinghu@ntub.edu.tw">{l('designer')}</a></footer>
   </div>;
 }

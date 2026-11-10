@@ -1,3 +1,6 @@
+import ntubLogoUrl from './ntub-logo.png';
+import {drawPhotoBackground} from './photoBackgrounds';
+import dmdLogoUrl from './dmd-logo.png';
 import type {ImageSegmenter} from '@mediapipe/tasks-vision';
 
 import {exposureGamma,foregroundAlpha,calibratedWeight,type FaceBox} from './matte';
@@ -101,9 +104,9 @@ export async function composePhoto(frame:HTMLCanvasElement,faces:FaceBox[],mirro
   });
   if(separationProblem)throw separationProblem;
   const {canvas,context}=surface(1920,1080);
-  const background=context.createLinearGradient(0,0,1920,1080);
-  background.addColorStop(0,'#badde9');background.addColorStop(1,'#f1e4cf');
-  context.fillStyle=background;context.fillRect(0,0,1920,1080);
+  context.fillStyle='#e6e6e6';
+  context.fillRect(0,0,canvas.width,canvas.height);
+  await drawPhotoBackground(context);
   const scale=Math.min(1920/frame.width,1080/frame.height);
   const w=frame.width*scale,h=frame.height*scale;
   context.save();
@@ -111,6 +114,24 @@ export async function composePhoto(frame:HTMLCanvasElement,faces:FaceBox[],mirro
   context.drawImage(cutout.canvas,(1920-w)/2,(1080-h)/2,w,h);
   context.restore();
   paintCharacter(context);
+  const logos=await Promise.all([ntubLogoUrl,dmdLogoUrl].map(async url=>{
+    const image=new Image();
+    image.src=url;
+    await image.decode();
+    return image;
+  }));
+  const logoWidth=310,margin=32,padding=14,gap=10;
+  const heights=logos.map(image=>logoWidth*image.naturalHeight/image.naturalWidth);
+  const x=canvas.width-margin-logoWidth-padding;
+  let y=margin+padding;
+  context.fillStyle='rgba(255,255,255,0.96)';
+  context.beginPath();
+  context.roundRect(x-padding,margin,logoWidth+2*padding,heights[0]+heights[1]+gap+2*padding,10);
+  context.fill();
+  for(const [i,image] of logos.entries()){
+    context.drawImage(image,x,y,logoWidth,heights[i]);
+    y+=heights[i]+gap;
+  }
   return new Promise<Blob>((resolve,reject)=>canvas.toBlob(blob=>{
     if(blob)resolve(blob);else reject(new Error('PNG encode failed'));
   },'image/png'));

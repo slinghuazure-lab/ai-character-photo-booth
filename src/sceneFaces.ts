@@ -36,3 +36,30 @@ export function sceneFaces(task:FaceDetector,source:HTMLCanvasElement|HTMLVideoE
   }
   return result;
 }
+
+// During a shot only search around the faces already present at the trigger.
+export function trackKnownFaces(task:FaceDetector,source:HTMLCanvasElement|HTMLVideoElement,width:number,height:number,
+  now:number,tile:HTMLCanvasElement,known:FaceBox[]):FaceBox[]{
+  if(!known.length)return [];
+  if(tile.width!==256 || tile.height!==256){tile.width=256;tile.height=256;}
+  const ctx=tile.getContext('2d');
+  if(!ctx)return [];
+  const boxes:FaceBox[]=[];
+  for(const [i,face] of known.entries()){
+    const size=Math.min(width,height,Math.max(face.width,face.height)*2.8);
+    const x=Math.max(0,Math.min(width-size,face.originX+(face.width-size)/2));
+    const y=Math.max(0,Math.min(height-size,face.originY+(face.height-size)/2));
+    ctx.drawImage(source,x,y,size,size,0,0,256,256);
+    const scale=size/256;
+    for(const d of task.detectForVideo(tile,now+i*0.01).detections){
+      const b=d.boundingBox;
+      if(!b)continue;
+      const box={originX:x+b.originX*scale,originY:y+b.originY*scale,width:b.width*scale,height:b.height*scale};
+      if(Math.abs(box.originX+box.width/2-face.originX-face.width/2)>face.width*.55 ||
+         Math.abs(box.originY+box.height/2-face.originY-face.height/2)>face.height*.55)continue;
+      if(!boxes.some(p=>Math.abs(p.originX-box.originX)<box.width*.25 && Math.abs(p.originY-box.originY)<box.height*.25))
+        boxes.push(box);
+    }
+  }
+  return boxes;
+}

@@ -4,13 +4,14 @@ import {TargetTracker} from './tracking';
 import {ThumbShutter} from './thumbShutter';
 import type {ShotRequest} from './PhotoPanel';
 import {assessLighting,LightingMonitor,type Lighting} from './lighting';
-import {sceneFaces} from './sceneFaces';
+import type {FaceBox} from './matte';
+import {sceneFaces,trackKnownFaces} from './sceneFaces';
 import type {Observation} from './useVisitor';
 import type {Point} from './visitorFlow';
 type GestureState='off'|'loading'|'running'|'error';
 const initial={state:'off', count:0, tracking:false, hz:0, ms:0, point:{x:0.5,y:0.5}, detail:''} as const;
 type Stats={state:'off'|'loading'|'running'|'error'; count:number; tracking:boolean; hz:number; ms:number; point:{x:number;y:number};detail:string};
-export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|null>,request:ShotRequest,observe:RefObject<Observation|null>) {
+export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|null>,request:ShotRequest,observe:RefObject<Observation|null>,captureLock:RefObject<FaceBox[]|null>) {
   const [stats,setStats]=useState<Stats>(initial);
   const [gestureShot,setGestureShot]=useState(0);
   const [gestureState,setGestureState]=useState<GestureState>('off');
@@ -74,7 +75,8 @@ export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|nul
               const ctx=still.getContext('2d');
               if(ctx)ctx.drawImage(el,0,0);else still=null;
             }
-            const boxes=sceneFaces(task,still??el,el.videoWidth,el.videoHeight,now,tile);
+            const locked=captureLock.current;
+            const boxes=locked!==null?trackKnownFaces(task,still??el,el.videoWidth,el.videoHeight,now,tile,locked):sceneFaces(task,still??el,el.videoWidth,el.videoHeight,now,tile);
             const ms=Math.round(performance.now()-start);
 
             const frame=tracker.step(boxes,el.videoWidth,el.videoHeight,now);
@@ -91,7 +93,7 @@ export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|nul
               }
               setLighting(monitor.update(reading,now));
             }
-            if(gesture && now-lastGesture>=150){
+            if(locked===null && gesture && now-lastGesture>=150){
               lastGesture=now;
               try{
                 const result=gesture.recognizeForVideo(still??el,now);
@@ -122,6 +124,6 @@ export function useDetector(active:boolean, video:RefObject<HTMLVideoElement|nul
     }
     void start().catch(fail);
     return ()=>{disposed=true;cancelAnimationFrame(raf);gesture?.close();detector?.close();};
-  },[active,video,request,observe]);
+  },[active,video,request,observe,captureLock]);
   return {stats,gaze,gestureState,gestureShot,lighting};
 }
