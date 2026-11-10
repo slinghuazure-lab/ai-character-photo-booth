@@ -1,6 +1,8 @@
 import {useEffect,useRef,useState,type RefObject} from 'react';
 import type {ImageSegmenter} from '@mediapipe/tasks-vision';
 import type {Language} from './i18n';
+import {newPhotoRecord,type PhotoRecord} from './photoRecord';
+import {writeRecord} from './photoHistoryStore';
 import PhotoShare from './PhotoShare';
 import {composePhoto} from './photo';
 
@@ -25,6 +27,7 @@ export default function PhotoPanel({lighting,language,ready,request,painter,mirr
   const [status,setStatus]=useState<'loading'|'ready'|'error'>('loading');
   const [retry,setRetry]=useState(0),[busy,setBusy]=useState(false);
   const [error,setError]=useState<number|null>(null),[url,setUrl]=useState('');
+  const [record,setRecord]=useState<PhotoRecord|null>(null);
   const [trial,setTrial]=useState(false);
   const venueKey='ntub-photo-venue-setup-v1';
   const [configured,setConfigured]=useState(()=>{
@@ -81,8 +84,14 @@ export default function PhotoPanel({lighting,language,ready,request,painter,mirr
     request.current=(frame,faces)=>{
       const task=model.current,paint=painter.current;
       if(!frame||!paint||!task){setError(7);setBusy(false);return;}
+      const capturedAt=Date.now();
       void composePhoto(frame,faces,mirror,task,paint,plate).then(blob=>{
-        if(generation.current===epoch)setUrl(URL.createObjectURL(blob));
+        if(generation.current!==epoch)return;
+        setUrl(URL.createObjectURL(blob));
+        if(!trial){
+          const photo=newPhotoRecord(faces.length,capturedAt);
+          setRecord(photo);writeRecord(photo);
+        }
       }).catch(()=>{if(generation.current===epoch)setError(3);})
         .finally(()=>{if(generation.current===epoch)setBusy(false);});
     };
@@ -100,6 +109,6 @@ export default function PhotoPanel({lighting,language,ready,request,painter,mirr
     }}>{plate?t[10]:recording?t[11]:t[8]}</button>
     {recording&&<span role="status">{t[9]}</span>}
     {error!==null&&<span role="alert">{t[error]}</span>}
-    {url&&<figure><img src={url} alt={t[6]}/><figcaption>{trial&&<p>{staff.review}</p>}<a href={url} download={trial?"NTUB-test-1920x1080.png":"NTUB-1920x1080.png"}>{t[5]} · 1920 × 1080</a>{!trial&&<PhotoShare key={url} url={url} language={language}/>}</figcaption></figure>}
+    {url&&<figure><img src={url} alt={t[6]}/><figcaption>{trial&&<p>{staff.review}</p>}<a href={url} download={trial?"NTUB-test-1920x1080.png":"NTUB-1920x1080.png"}>{t[5]} · 1920 × 1080</a>{!trial&&record&&<PhotoShare key={url} url={url} language={language} record={record}/>}</figcaption></figure>}
   </section>;
 }

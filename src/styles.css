@@ -9,3 +9,5 @@
 .lighting-status{font-size:14px;margin:0 0 10px;color:#c6d5e9}.lighting-status[data-light=dark],.lighting-status[data-light=backlit]{color:#ffe0a1}.photo-panel button{margin:4px 8px 4px 0}
 
 .photo-share{margin-top:12px}.photo-panel .photo-share img{width:min(100%,320px);height:auto;margin-bottom:8px}
+
+.photo-history{max-height:24rem;overflow:auto}.photo-history summary{cursor:pointer}.photo-history table{width:100%;border-collapse:collapse;font-size:.85rem}.photo-history td,.photo-history th{text-align:start;padding:6px 3px;border-bottom:1px solid #344765}

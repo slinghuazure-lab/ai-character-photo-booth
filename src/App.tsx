@@ -4,6 +4,7 @@ import {cameraSupported,cameraErrorMessage,getCameraInfo,listCameras,startCamera
 import {loadSettings,saveSettings,defaults,type ExhibitSettings} from './settings';
 import {t,type MessageKey} from './i18n';
 
+import PhotoHistory from './PhotoHistory';
 import PhotoPanel,{type CharacterPainter,type ShotRequest} from './PhotoPanel';
 import {useDetector} from './useDetector';
 import {exhibitLabels} from './exhibitLabels';
@@ -75,7 +76,7 @@ export default function App(){
   const switchResolution=(resolution:Resolution)=>{update({resolution});if(status==='active'||status==='loading')void start({resolution});};
   const toggleFullScreen=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{/* Fullscreen is optional */}};
   return <div className="app-shell">
-    <header className="topbar"><div className="brand"><span className="brand-icon"><Camera size={23}/></span><div><strong>{l('title')}</strong><small>{l('subtitle')}</small></div></div><div className="header-actions"><span className="version">P0-5</span><select aria-label={l('language')} value={settings.language} onChange={e=>update({language:e.target.value as ExhibitSettings['language']})}><option value="zh-TW">繁體中文</option><option value="en">English</option><option value="ja">日本語</option></select></div></header>
+    <header className="topbar"><div className="brand"><span className="brand-icon"><Camera size={23}/></span><div><strong>{l('title')}</strong><small>{l('subtitle')}</small></div></div><div className="header-actions"><span className="version">P0-6</span><select aria-label={l('language')} value={settings.language} onChange={e=>update({language:e.target.value as ExhibitSettings['language']})}><option value="zh-TW">繁體中文</option><option value="en">English</option><option value="ja">日本語</option></select></div></header>
     <main className="dashboard"><section className="stage-panel"><div className="stage-toolbar"><span className={`status-chip ${status}`}><span className="dot"/>{l(status)}</span><button className="icon-button" onClick={()=>void toggleFullScreen()} title={fullscreen?l('exitFullScreen'):l('fullScreen')} aria-label={fullscreen?l('exitFullScreen'):l('fullScreen')}>{fullscreen?<Minimize size={19}/>:<Maximize size={19}/>}</button></div>
       <div className="stage"><video ref={videoRef} playsInline muted autoPlay className={settings.mirror?'mirrored':''} aria-label={l('camera')}/>{status!=='active'&&<div className="empty-state"><div className="empty-icon">{status==='error'?<CameraOff size={43}/>:<Camera size={43}/>}</div><h2>{status==='error'?l('cameraError'):status==='loading'?l('loading'):l('noCamera')}</h2><p>{status==='error'?l(error||'cameraError'):l('permission')}</p></div>}{status==='active'&&<CharacterBoundary onError={()=>setRenderer('error')}><Suspense fallback={null}><Character painter={painter} tracking={stats.tracking} gaze={gaze} mirror={settings.mirror} cue={cue} onState={setRenderer}/></Suspense></CharacterBoundary>}{status==='active'&&<div className="preview-label"><span className="live-dot"/> LIVE · {info?.width}×{info?.height}</div>}</div>
       {status==='active'&&<div className="consent-panel">
@@ -96,6 +97,6 @@ export default function App(){
       [labels.speed,stats.state==='running'?stats.hz+' Hz / '+stats.ms+' ms':'—'],
       [labels.mode,status==='active' && renderer==='ready'?labels[action??(stats.tracking?'tracking':'idle')]:'—']
     ].map(([key,value])=><div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>}{(stats.state==='error'||renderer==='error')&&<p className="hint" role="alert">{stats.state==='error'?labels.detector:labels.character} · {labels.error}. {labels.help} {stats.detail}</p>}</section>
-    </aside></main><footer className="footer"><Monitor size={15}/> AI Interactive Character Photo Booth · P0-5 <Languages size={15}/></footer>
+    <PhotoHistory language={settings.language}/></aside></main><footer className="footer"><Monitor size={15}/> AI Interactive Character Photo Booth · P0-6 <Languages size={15}/></footer>
   </div>;
 }
