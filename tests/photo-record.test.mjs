@@ -9,5 +9,5 @@ test('each formal capture has its own id, timestamp, headcount and initial statu
 });
 test('ignore invalid local records',()=>{
  const row=newPhotoRecord(1,100);
- for(const bad of [null,{...row,people:6},{...row,capturedAt:-1},{...row,id:'?'},{...row,shareStatus:'downloaded'}])assert.equal(isPhotoRecord(bad),false);
+ for(const bad of [null,{...row,people:-1},{...row,capturedAt:-1},{...row,id:'?'},{...row,shareStatus:'downloaded'}])assert.equal(isPhotoRecord(bad),false);
 });

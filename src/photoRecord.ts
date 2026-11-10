@@ -15,6 +15,6 @@ export function isPhotoRecord(value:unknown):value is PhotoRecord{
   const r=value as Partial<PhotoRecord>;
   return typeof r.id==='string' && /^[a-f\d-]{36}$/i.test(r.id) &&
     typeof r.capturedAt==='number' && Number.isSafeInteger(r.capturedAt) && r.capturedAt>0 &&
-    typeof r.people==='number' && Number.isInteger(r.people) && r.people>=1 && r.people<=5 &&
+    typeof r.people==='number' && Number.isInteger(r.people) && r.people>=0 && r.people<=32767 &&
     (r.shareStatus==='local' || r.shareStatus==='shared' || r.shareStatus==='failed');
 }

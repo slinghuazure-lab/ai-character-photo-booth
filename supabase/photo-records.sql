@@ -7,10 +7,13 @@ create table if not exists booth_reporting.photo_records (
   photo_id uuid primary key,
   booth_id uuid not null,
   captured_at timestamptz not null,
-  participants smallint not null check (participants between 1 and 5),
+  participants smallint not null check (participants >= 0),
   share_status text not null check (share_status in ('local','shared','failed')),
   revision integer not null check (revision > 0)
 );
+-- Update existing installations that used the old 1–5 consent limit.
+alter table booth_reporting.photo_records drop constraint if exists photo_records_participants_check;
+alter table booth_reporting.photo_records add constraint photo_records_participants_check check (participants >= 0);
 alter table booth_reporting.photo_records enable row level security;
 revoke all on booth_reporting.photo_records from public, anon, authenticated;
 
