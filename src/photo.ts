@@ -1,6 +1,6 @@
 import type {ImageSegmenter} from '@mediapipe/tasks-vision';
 
-import {exposureGamma,foregroundAlpha,type FaceBox} from './matte';
+import {exposureGamma,foregroundAlpha,referenceWeight,type FaceBox} from './matte';
 
 function surface(width:number,height:number){
   const canvas=document.createElement('canvas');
@@ -11,7 +11,7 @@ function surface(width:number,height:number){
 }
 
 export async function composePhoto(frame:HTMLCanvasElement,faces:FaceBox[],mirror:boolean,segmenter:ImageSegmenter,
-  paintCharacter:(context:CanvasRenderingContext2D)=>void){
+  paintCharacter:(context:CanvasRenderingContext2D)=>void,reference:ImageData|null){
   const cutout=surface(frame.width,frame.height);
   cutout.context.drawImage(frame,0,0);
   segmenter.segment(frame,result=>{
@@ -21,9 +21,23 @@ export async function composePhoto(frame:HTMLCanvasElement,faces:FaceBox[],mirro
     const pixels=mask.getAsFloat32Array();
     const matte=surface(mask.width,mask.height);
     const rgba=matte.context.createImageData(mask.width,mask.height);
+    const image=cutout.context.getImageData(0,0,frame.width,frame.height);
+    const plate=reference?.width===frame.width && reference.height===frame.height?reference.data:null;
     let foreground=false;
     for(let i=0;i<pixels.length;i++){
-      rgba.data[4*i+3]=foregroundAlpha(pixels[i]);
+      let alpha=foregroundAlpha(pixels[i]);
+      if(plate && alpha){
+        const x=Math.floor(((i%mask.width)+0.5)*frame.width/mask.width);
+        const y=Math.floor((Math.floor(i/mask.width)+0.5)*frame.height/mask.height);
+        // Small patches also compare fabric texture, not just a single dark pixel.
+        let distance=0;
+        for(const dy of [-2,0,2])for(const dx of [-2,0,2]){
+          const j=4*(Math.max(0,Math.min(frame.height-1,y+dy))*frame.width+Math.max(0,Math.min(frame.width-1,x+dx)));
+          distance+=Math.max(Math.abs(image.data[j]-plate[j]),Math.abs(image.data[j+1]-plate[j+1]),Math.abs(image.data[j+2]-plate[j+2]));
+        }
+        alpha*=referenceWeight(distance/9);
+      }
+      rgba.data[4*i+3]=alpha;
       if(pixels[i]<0.5)foreground=true;
     }
     if(!foreground)throw new Error('No foreground');
@@ -39,18 +53,21 @@ export async function composePhoto(frame:HTMLCanvasElement,faces:FaceBox[],mirro
       guard.addColorStop(0,'#fff');guard.addColorStop(1,'transparent');
       matte.context.fillStyle=guard;matte.context.fillRect(-1,-1,2,2);matte.context.restore();
     }
-    const image=cutout.context.getImageData(0,0,frame.width,frame.height);
-    let faceSum=0,faceN=0,bgSum=0,bgN=0;
+    let faceSum=0,faceN=0,bgN=0;
+    const histogram=new Uint32Array(256);
     for(let y=4;y<frame.height;y+=12)for(let x=4;x<frame.width;x+=12){
       const i=4*(y*frame.width+x);
       const luma=image.data[i]*0.213+image.data[i+1]*0.715+image.data[i+2]*0.072;
       if(faces.some(f=>Math.abs(x-f.originX-f.width/2)<f.width*0.20 &&
           Math.abs(y-f.originY-f.height/2)<f.height*0.22)){faceSum+=luma;faceN++;}
       else if(pixels[Math.floor(y*mask.height/frame.height)*mask.width+Math.floor(x*mask.width/frame.width)]>0.9){
-        bgSum+=luma;bgN++;
+        histogram[Math.round(luma)]++;bgN++;
       }
     }
-    const gamma=faceN && bgN?exposureGamma(faceSum/faceN,bgSum/bgN):1;
+    // A bright window can be hidden by a much darker background average.
+    let bright=0,seen=0;
+    while(bright<255 && seen+histogram[bright]<bgN*0.85)seen+=histogram[bright++];
+    const gamma=faceN && bgN?exposureGamma(faceSum/faceN,bright):1;
     if(gamma<1){
       const lut=Uint8ClampedArray.from({length:256},(_,i)=>255*Math.pow(i/255,gamma));
       for(let i=0;i<image.data.length;i+=4)for(let c=0;c<3;c++)image.data[i+c]=lut[image.data[i+c]];

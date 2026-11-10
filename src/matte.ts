@@ -8,5 +8,10 @@ export function foregroundAlpha(background:number){
 // Limit lifting to a dark subject against a substantially brighter background.
 export function exposureGamma(faceLuma:number,backgroundLuma:number){
   if(faceLuma>=80 || backgroundLuma-faceLuma<45)return 1;
-  return 1-0.25*Math.min(1,(80-faceLuma)/45)*Math.min(1,(backgroundLuma-faceLuma-45)/55);
+  return 1-0.42*Math.min(1,(80-faceLuma)/45)*Math.min(1,(backgroundLuma-faceLuma-45)/55);
+}
+
+export function referenceWeight(difference:number){
+  const t=Math.max(0,Math.min(1,(difference-8)/20));
+  return t*t*(3-2*t);
 }
