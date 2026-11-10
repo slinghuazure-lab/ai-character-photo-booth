@@ -8,7 +8,7 @@ P0-4 可在全員同意後拍攝去背合照、預覽並下載 1920×1080 PNG。
 
 P0-5 支援手動分享正式合照，取得 QR Code 後可下載同一張 PNG。[模擬操作、Supabase 設定與驗收表](docs/p0-5-acceptance.md)
 
-P0-6 展覽模式以 V15 角色待機、問好與邀請引導訪客。人臉持續一分鐘後，臉旁比讚加入，倒數五秒拍照，自動上傳入選人物的合照並展示五秒 QR。[展覽流程與動畫設定](docs/exhibit-flow.md) · [Supabase 拍照紀錄與統計](docs/p0-6-acceptance.md)
+P0-6 展覽模式以 V15 角色待機、問好與邀請引導訪客。人臉持續 10 秒後，臉旁比讚加入，倒數五秒拍照，自動上傳入選人物的合照並展示五秒 QR。[展覽流程與動畫設定](docs/exhibit-flow.md) · [Supabase 拍照紀錄與統計](docs/p0-6-acceptance.md)
 
 ## 使用
 

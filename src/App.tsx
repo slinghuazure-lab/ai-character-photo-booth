@@ -4,7 +4,8 @@ import {cameraSupported,cameraErrorMessage,getCameraInfo,listCameras,startCamera
 import {loadSettings,saveSettings,defaults,type ExhibitSettings} from './settings';
 import {t,type MessageKey} from './i18n';
 
-import {AnimationSettings,loadAnimations} from './animationSettings';
+import {AnimationSettings} from './animationSettings';
+import {useCharacterModel} from './useCharacterModel';
 import {useVisitor,type Observation} from './useVisitor';
 import {VisitorOverlay,visitorText} from './VisitorOverlay';
 import PhotoHistory from './PhotoHistory';
@@ -33,8 +34,10 @@ export default function App(){
   const request:ShotRequest=useRef(null);
   const painter:CharacterPainter=useRef(null);
   const observe=useRef<Observation|null>(null);
-  const [animations,setAnimations]=useState(loadAnimations);
+  const character=useCharacterModel();
+  const animations=character.model.slots;
   const [staff,setStaff]=useState(false);
+  const [inspectCamera,setInspectCamera]=useState(false);
   const [plate,setPlate]=useState<ImageData|null>(null);
   const audio=useRef<AudioContext|null>(null);
   const shutterSound=()=>{
@@ -48,9 +51,17 @@ export default function App(){
   const labels=exhibitLabels(settings.language);
   const [renderer,setRenderer]=useState<'ready'|'error'|'loading'>('loading');
   const exhibition=useVisitor({active:status==='active'&&!staff,ready:renderer==='ready'&&gestureState==='running',
-    animations,mirror:settings.mirror,request,painter,observe,sound:shutterSound,plate});
+    animations,assetKey:character.model.key,mirror:settings.mirror,request,painter,observe,sound:shutterSound,plate});
+  useEffect(()=>setRenderer('loading'),[character.model.key]);
   const guest=status==='active'&&!staff;
   const visibleCamera=staff||exhibition.view.phase==='countdown';
+  const checking=guest && exhibition.view.phase==='idle';
+  useEffect(()=>{if(!checking)setInspectCamera(false);},[checking]);
+  const cameraHelp={
+    'zh-TW':['人臉偵測載入中','人臉偵測失敗，請停止並重新開始展示','偵測人臉數','檢查鏡頭','關閉鏡頭小預覽'],
+    en:['Loading face detector','Face detector failed. Restart the exhibit.','Faces detected','Check camera','Close camera check'],
+    ja:['顔検出を準備中','顔検出エラー。展示を再開してください','検出した顔の数','カメラを確認','確認を閉じる']
+  }[settings.language];
   const guestText=visitorText(settings.language);
   const [cue,setCue]=useState<{kind:Cue;at:number}>({kind:'photo',at:-Infinity});
   const [action,setAction]=useState<Cue|null>(null);
@@ -100,12 +111,15 @@ export default function App(){
   return <div className="app-shell">
     <header className="topbar"><div className="brand"><span className="brand-icon"><Camera size={23}/></span><div><strong>{l('title')}</strong><small>{l('subtitle')}</small></div></div><div className="header-actions"><span className="version">P0-6</span><select aria-label={l('language')} value={settings.language} onChange={e=>update({language:e.target.value as ExhibitSettings['language']})}><option value="zh-TW">繁體中文</option><option value="en">English</option><option value="ja">日本語</option></select></div></header>
     <main className="dashboard exhibit-dashboard"><section className="stage-panel"><div className="stage-toolbar"><span className={`status-chip ${status}`}><span className="dot"/>{l(status)}</span><button className="icon-button" onClick={()=>void toggleFullScreen()} title={fullscreen?l('exitFullScreen'):l('fullScreen')} aria-label={fullscreen?l('exitFullScreen'):l('fullScreen')}>{fullscreen?<Minimize size={19}/>:<Maximize size={19}/>}</button></div>
-      <div className={'stage '+(guest?'visitor-stage ':'')+(guest&&!visibleCamera?'character-stage':'')} data-phase={guest?exhibition.view.phase:undefined} data-animation={guest?exhibition.view.clip:undefined}><video ref={videoRef} playsInline muted autoPlay className={settings.mirror?'mirrored':''} aria-label={l('camera')}/>{status!=='active'&&<div className="empty-state"><div className="empty-icon">{status==='error'?<CameraOff size={43}/>:<Camera size={43}/>}</div><h2>{status==='error'?l('cameraError'):status==='loading'?l('loading'):l('noCamera')}</h2><p>{status==='error'?l(error||'cameraError'):l('permission')}</p></div>}{status==='active'&&<CharacterBoundary onError={()=>setRenderer('error')}><Suspense fallback={null}><Character clip={guest?exhibition.view.clip:undefined} painter={painter} tracking={stats.tracking} gaze={gaze} mirror={settings.mirror} cue={cue} onState={setRenderer}/></Suspense></CharacterBoundary>}{guest&&<VisitorOverlay view={exhibition.view} language={settings.language} reset={exhibition.reset}/>} {status==='active'&&visibleCamera&&<div className="preview-label"><span className="live-dot"/> LIVE · {info?.width}×{info?.height}</div>}</div>
+      <div className={'stage '+(guest?'visitor-stage ':'')+(guest&&!visibleCamera?'character-stage':'')} data-check-camera={checking&&inspectCamera} data-phase={guest?exhibition.view.phase:undefined} data-animation={guest?exhibition.view.clip:undefined}><video ref={videoRef} playsInline muted autoPlay className={settings.mirror?'mirrored':''} aria-label={l('camera')}/>{status!=='active'&&<div className="empty-state"><div className="empty-icon">{status==='error'?<CameraOff size={43}/>:<Camera size={43}/>}</div><h2>{status==='error'?l('cameraError'):status==='loading'?l('loading'):l('noCamera')}</h2><p>{status==='error'?l(error||'cameraError'):l('permission')}</p></div>}{status==='active'&&<CharacterBoundary onError={()=>setRenderer('error')}><Suspense fallback={null}><Character source={character.model.source} idle={animations.idle[0]} pose={animations.photo[0]} clip={guest?exhibition.view.clip:undefined} painter={painter} tracking={stats.tracking} gaze={gaze} mirror={settings.mirror} cue={cue} onState={setRenderer}/></Suspense></CharacterBoundary>}{guest&&<VisitorOverlay custom={!!character.model.source} view={exhibition.view} language={settings.language} reset={exhibition.reset}/>} {status==='active'&&visibleCamera&&<div className="preview-label"><span className="live-dot"/> LIVE · {info?.width}×{info?.height}</div>}</div>
+      {checking&&<div className="camera-check"><span>{stats.state==='running'?cameraHelp[2]+' '+stats.count:stats.state==='error'?cameraHelp[1]:cameraHelp[0]}</span>
+        <button className="subtle-button" aria-pressed={inspectCamera} onClick={()=>setInspectCamera(v=>!v)}>{cameraHelp[inspectCamera?4:3]}</button></div>}
+      {status==='active'&&staff&&<button className="subtle-button" onClick={()=>setStaff(false)}>{guestText.exit}</button>}
       {status==='active'&&staff&&<PhotoPanel plate={plate} setPlate={setPlate} gestureShot={gestureShot} lighting={lighting} video={videoRef} empty={stats.state==='running' && stats.count===0 && !stats.tracking} language={settings.language} mirror={settings.mirror}
         ready={stats.state==='running' && renderer==='ready'} request={request} painter={painter}/>}
       <div className="stage-footer"><div className="privacy"><ShieldCheck size={17}/><span>{l('privacy')}</span></div><div className="controls">{status==='active'&&staff&&(['left','right','photo'] as const).map(kind=><button key={kind} disabled={renderer!=='ready'} className="subtle-button" onClick={()=>play(kind)}>{labels[kind]}</button>)}{status==='active'?<button className="danger-button" onClick={stop}><CameraOff size={18}/>{l('stop')}</button>:<button className="primary-button" disabled={status==='loading'} onClick={()=>void start()}><Camera size={18}/>{status==='error'?l('retry'):l('start')}</button>}</div></div>
     </section>
-    <details className="exhibit-settings"><summary>{guestText.settings}</summary><aside className="sidebar"><AnimationSettings language={settings.language} value={animations} onChange={setAnimations}/><button className="subtle-button" onClick={()=>setStaff(v=>!v)}>{staff?guestText.exit:guestText.staff}</button><section className="panel"><div className="panel-title"><Settings2 size={19}/><h2>{l('camera')}</h2></div><label htmlFor="camera-select">{l('cameraHelp')}</label><select id="camera-select" value={devices.some(d=>d.deviceId===settings.deviceId)?settings.deviceId:''} onChange={e=>switchCamera(e.target.value)}><option value="">{l('auto')}</option>{devices.map((d,i)=><option key={d.deviceId||i} value={d.deviceId}>{d.label}</option>)}</select><label htmlFor="resolution-select">{l('resolution')}</label><select id="resolution-select" value={settings.resolution} onChange={e=>switchResolution(e.target.value as Resolution)}><option value="auto">{l('auto')} (720p)</option><option value="640">640 × 480</option><option value="1280">1280 × 720</option><option value="1920">1920 × 1080</option></select><p className="hint">{l('resolutionNote')}</p><label className="switch-line"><input type="checkbox" checked={settings.mirror} onChange={e=>update({mirror:e.target.checked})}/><span>{l('mirror')}</span></label><button className="subtle-button" onClick={()=>{setSettings(defaults);stop();}}><RotateCcw size={16}/>{l('reset')}</button></section>
+    <details className="exhibit-settings"><summary>{guestText.settings}</summary><aside className="sidebar"><AnimationSettings language={settings.language} value={animations} onChange={character.setSlots} choose={character.choose} catalog={character.model.catalog} name={character.model.name} custom={!!character.model.source} busy={character.busy} error={character.error}/><button className="subtle-button" onClick={()=>setStaff(v=>!v)}>{staff?guestText.exit:guestText.staff}</button><section className="panel"><div className="panel-title"><Settings2 size={19}/><h2>{l('camera')}</h2></div><label htmlFor="camera-select">{l('cameraHelp')}</label><select id="camera-select" value={devices.some(d=>d.deviceId===settings.deviceId)?settings.deviceId:''} onChange={e=>switchCamera(e.target.value)}><option value="">{l('auto')}</option>{devices.map((d,i)=><option key={d.deviceId||i} value={d.deviceId}>{d.label}</option>)}</select><label htmlFor="resolution-select">{l('resolution')}</label><select id="resolution-select" value={settings.resolution} onChange={e=>switchResolution(e.target.value as Resolution)}><option value="auto">{l('auto')} (720p)</option><option value="640">640 × 480</option><option value="1280">1280 × 720</option><option value="1920">1920 × 1080</option></select><p className="hint">{l('resolutionNote')}</p><label className="switch-line"><input type="checkbox" checked={settings.mirror} onChange={e=>update({mirror:e.target.checked})}/><span>{l('mirror')}</span></label><button className="subtle-button" onClick={()=>{setSettings(defaults);stop();}}><RotateCcw size={16}/>{l('reset')}</button></section>
     <section className="panel"><div className="panel-title"><Activity size={19}/><h2>{l('debug')}</h2></div><button className="subtle-button" onClick={()=>update({showDebug:!settings.showDebug})}>{settings.showDebug?l('hideDebug'):l('showDebug')}</button>{settings.showDebug&&<dl className="debug-list"><div><dt>{l('status')}</dt><dd>{l(status)}</dd></div><div><dt>{l('device')}</dt><dd className="truncate" title={info?.deviceId||'-'}>{info?.deviceId?.slice(0,12)||'-'}</dd></div><div><dt>{l('requested')}</dt><dd>{settings.resolution==='auto'?'Auto':settings.resolution+'p'}</dd></div><div><dt>{l('actual')}</dt><dd>{info?`${info.width} × ${info.height}`:'-'}</dd></div><div><dt>{l('fps')}</dt><dd>{status==='active'?fps:'-'}</dd></div><div><dt>{l('viewport')}</dt><dd>{viewport}</dd></div><div><dt>{l('secure')}</dt><dd>{window.isSecureContext?l('yes'):l('no')}</dd></div>{[
       [labels.detector,labels[stats.state]], [labels.handDetector,labels[gestureState]], [labels.character,labels[status==='active'?renderer:'off']],
       [labels.faces,stats.state==='running'?stats.count:'—'],

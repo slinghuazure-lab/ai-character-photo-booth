@@ -8,6 +8,7 @@ const overlap=(a:FaceBox,b:FaceBox)=>{
   const h=Math.max(0,Math.min(a.originY+a.height,b.originY+b.height)-Math.max(a.originY,b.originY));
   return w*h/Math.min(a.width*a.height,b.width*b.height);
 };
+const inviteDelay=10000;
 export class VisitorFlow{
   phase:VisitorPhase='idle';
   people:Person[]=[];
@@ -15,26 +16,33 @@ export class VisitorFlow{
   deadline=0;
   separate=false;
   private releaseNeeded=false;
+  private interrupted=false;
+  get inviteSeconds(){
+    const person=this.people.find(p=>p.id===this.greeted);
+    return person?Math.max(1,Math.ceil((inviteDelay-(this.last-person.since))/1000)):10;
+  }
   private next=1;
   private last=-Infinity;
   private greeted=0;
   private finished=new Set<number>();
   private match(faces:FaceBox[],now:number){
-    const old=now-this.last<=1000?this.people:[];
+    const old=now-this.last<=(this.interrupted?750:1000)?this.people:[];
     const options=faces.map(f=>old.filter(p=>overlap(f,p)>0.35));
     this.people=faces.map((f,i)=>{
       const candidate=options[i].length===1?options[i][0]:null;
       if(candidate && options.filter(o=>o.includes(candidate)).length===1)
-        return {...f,id:candidate.id,since:candidate.since};
+        return {...f,id:candidate.id,since:candidate.since+(this.interrupted?now-this.last:0)};
       return {...f,id:this.next++,since:now};
     });
-    this.last=now;
+    this.last=now;this.interrupted=false;
   }
   reset(){
     this.finished=new Set(this.people.map(p=>p.id));this.phase='idle';this.participants.clear();
     this.greeted=0;this.separate=false;this.releaseNeeded=false;
   }
   step(faces:FaceBox[],thumbs:Point[]|null,now:number){
+    // Pause the greeting on a brief missed detection; only a matched return resumes it.
+    if(this.phase==='hello' && !faces.length && now-this.last<=750){this.interrupted=true;return;}
     this.match(faces,now);
     if(['processing','qr','error'].includes(this.phase))return;
     if(this.phase==='countdown' && [...this.participants].some(id=>!this.people.some(p=>p.id===id))){
@@ -46,7 +54,7 @@ export class VisitorFlow{
       if(this.phase!=='countdown')this.phase=next?'hello':'idle';
     }
     const person=this.people.find(p=>p.id===this.greeted);
-    if(this.phase==='hello' && person && now-person.since>=60000)this.phase='invite';
+    if(this.phase==='hello' && person && now-person.since>=inviteDelay)this.phase='invite';
     if((this.phase==='invite'||this.phase==='countdown') && thumbs){
       if(this.releaseNeeded){
         if(!thumbs.length)this.releaseNeeded=false;

@@ -6,10 +6,11 @@ const words={
  ja:{idle:'小菁鷹と会おう',hello:'こんにちは！',invite:'一緒に写真を撮りますか？',countdown:'カメラを見てください',processing:'合成写真を作成中',qr:'スキャンして写真を保存',error:'撮影を完了できませんでした',instruction:'自分の顔の横で親指を立ててください。写真をアップロードしてQRで共有します。',separate:'間隔を空け、顔と体が見える状態でもう一度親指を立ててください。',reset:'待機に戻る',finish:'秒後に待機',upload:'アップロード失敗。写真は保存できます。',model:'カメラまたはモデルを確認してください。',save:'写真を保存',settings:'展示設定',staff:'スタッフ試写',exit:'展示に戻る'}
 };
 export const visitorText=(language:Language)=>words[language];
-export function VisitorOverlay({view,language,reset}:{view:{phase:VisitorPhase;seconds:number;separate:boolean;qr:string;link:string;photo:string;error:string};language:Language;reset:()=>void}){
+export function VisitorOverlay({view,language,reset,custom}:{custom:boolean;view:{phase:VisitorPhase;seconds:number;separate:boolean;qr:string;link:string;photo:string;error:string};language:Language;reset:()=>void}){
  const t=words[language];
  if(view.phase==='qr')return <div className="visitor-result"><img className="visitor-photo" src={view.photo} alt={t.save}/><div><h2>{t.qr}</h2><a href={view.link} target="_blank" rel="noreferrer"><img className="visitor-qr" src={view.qr} alt={t.qr}/></a><p>{view.seconds} {t.finish}</p></div></div>;
- return <div className={'visitor-message phase-'+view.phase} role="status"><h2>{t[view.phase]}</h2>
+ return <div className={'visitor-message phase-'+view.phase} role="status"><h2>{custom&&view.phase==='hello'?{'zh-TW':'你好！',en:'Hello!',ja:'こんにちは！'}[language]:custom&&view.phase==='idle'?{'zh-TW':'等你來合照',en:'Ready for a photo',ja:'撮影をお待ちしています'}[language]:t[view.phase]}</h2>
+ {view.phase==='hello'&&<p>{{'zh-TW':'面向鏡頭，合照邀請倒數',en:'Face the camera · photo invitation in',ja:'カメラを向いてください・撮影のお誘いまで'}[language]} {view.seconds} s</p>}
  {view.phase==='invite'&&<p>{view.separate?t.separate:t.instruction}</p>}
  {view.phase==='countdown'&&<><strong>{view.seconds}</strong>{view.separate&&<p>{t.separate}</p>}</>}
  {view.phase==='error'&&<><p>{view.error==='upload'?t.upload:t.model}</p>{view.photo&&<a href={view.photo} download="NTUB-1920x1080.png">{t.save}</a>} <button className="subtle-button" onClick={reset}>{t.reset}</button></>}

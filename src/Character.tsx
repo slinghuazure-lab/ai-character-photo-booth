@@ -1,30 +1,14 @@
 import {useEffect,useRef,type RefObject} from 'react';
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {fileLoader,releaseModel} from './modelImport';
 import {eyeRotation,type Point} from './tracking';
 
 import type {CharacterPainter} from './PhotoPanel';
 import type {Clip} from './animationSettings';
 export type Cue='photo'|'left'|'right';
-type Props={clip?:Clip;painter:CharacterPainter; gaze:RefObject<Point>; tracking:boolean; mirror:boolean; cue:{kind:Cue;at:number}; onState:(value:'ready'|'error')=>void};
+type Props={source:string|null;idle:Clip;pose:Clip;clip?:Clip;painter:CharacterPainter; gaze:RefObject<Point>; tracking:boolean; mirror:boolean; cue:{kind:Cue;at:number}; onState:(value:'ready'|'error')=>void};
 const modelUrl=import.meta.env.BASE_URL+'models/NTUB_Doctoral_Owl_6_Actions.glb';
-
-function releaseModel(root:THREE.Object3D) {
-  const textures=new Set<THREE.Texture>();
-  root.traverse(node=>{
-    if(!(node instanceof THREE.Mesh))return;
-    node.geometry.dispose();
-    if(node instanceof THREE.SkinnedMesh)node.skeleton.dispose();
-    for(const material of Array.isArray(node.material)?node.material:[node.material]){
-      for(const value of Object.values(material))if(value instanceof THREE.Texture)textures.add(value);
-      material.dispose();
-    }
-  });
-  for(const texture of textures){
-    texture.dispose();
-    texture.source.data?.close?.();
-  }
-}
 
 function bindEye(root:THREE.Object3D,side:'left'|'right') {
   let joint:THREE.Bone|undefined, lid:THREE.Mesh|undefined;
@@ -33,7 +17,7 @@ function bindEye(root:THREE.Object3D,side:'left'|'right') {
     if(node instanceof THREE.Mesh && node.userData.name==='Upper eyelid.'+(side==='left'?'L':'R'))lid=node;
   });
   if(!joint || !lid || !lid.morphTargetInfluences || lid.morphTargetDictionary?.Blink===undefined)
-    throw new Error('Missing V15 eye rig: '+side);
+    return null;
   const bone=joint, rest=bone.quaternion.clone(), animated=rest.clone();
   const weights=lid.morphTargetInfluences, blink=lid.morphTargetDictionary.Blink;
   const up=new THREE.Vector3().fromArray(bone.userData.local_up_axis).normalize();
@@ -91,46 +75,58 @@ export default function Character(props:Props) {
     };
     renderer.domElement.addEventListener('webglcontextlost',fail);
     async function load(){
-      const gltf=await new GLTFLoader().loadAsync(modelUrl);
+      const custom=!!props.source;
+      const gltf=custom?await fileLoader().loadAsync(props.source!):await new GLTFLoader().loadAsync(modelUrl);
       if(disposed||failed){releaseModel(gltf.scene);return;}
-      model=gltf.scene;scene.add(model);
+      model=gltf.scene;
+      if(custom){
+        const wrap=new THREE.Group();wrap.add(model);
+        const bounds=new THREE.Box3().setFromObject(model,true),size=bounds.getSize(new THREE.Vector3());
+        const scale=Math.min(4.5/Math.max(size.y,.001),4.1/Math.max(size.x,.001),4.1/Math.max(size.z,.001));
+        wrap.scale.setScalar(scale);
+        const center=bounds.getCenter(new THREE.Vector3());
+        wrap.position.set(-center.x*scale,2.26-center.y*scale,-center.z*scale);
+        scene.add(wrap);
+      }else scene.add(model);
       const eyes=[bindEye(model,'left'),bindEye(model,'right')];
       const animator=new THREE.AnimationMixer(model);mixer=animator;
       const action=(name:string)=>{
-        const clip=THREE.AnimationClip.findByName(gltf.animations,name);
-        if(!clip)throw new Error('Missing V15 animation: '+name);
+        const clip=custom?(gltf.animations[Number(name.split('/')[1])]??gltf.animations[0]):THREE.AnimationClip.findByName(gltf.animations,name);
+        if(!clip)throw new Error('Animation unavailable: '+name);
         return animator.clipAction(clip);
       };
-      let stand=action('Idle_03_Stand_Look').play();
+      const idle=()=>custom?live.current.idle:'Idle_03_Stand_Look';
+      let stand=action(idle()).play();
       let activeClip:Clip|undefined;
       const arm=model.getObjectByProperty('name','upper_armR')??model.getObjectByName('upper_arm.R');
       const animatedArm=new THREE.Quaternion();let waved=false;
-      const pose=action('Gesture_YA').setLoop(THREE.LoopOnce,1);
+      let pose=action(custom?live.current.pose:'Gesture_YA');
       pose.clampWhenFinished=true;
       animator.addEventListener('finished',()=>{
-        stand.reset().setEffectiveWeight(1).play();pose.crossFadeTo(stand,0.25,false);
+        stand.reset().setLoop(THREE.LoopRepeat,Infinity).setEffectiveWeight(1).play();if(pose!==stand)pose.crossFadeTo(stand,0.25,false);
       });
       let last=performance.now(), playedAt=-Infinity;
       function draw(now:number){
         const {cue}=live.current;
-        const clip=live.current.clip;
+        const clip=live.current.clip??idle();
         if(clip!==activeClip){
-          const next=action(clip==='Hello'||!clip?'Idle_03_Stand_Look':clip);
+          const next=action(!custom&&clip==='Hello'?'Idle_03_Stand_Look':clip);
           next.setLoop(THREE.LoopRepeat,Infinity);
           if(next!==stand){next.reset().setEffectiveWeight(1).play();stand.crossFadeTo(next,0.35,false);stand=next;}
           activeClip=clip;
         }
-        if(!clip && cue.kind==='photo' && cue.at>playedAt){
+        if(!live.current.clip && cue.kind==='photo' && cue.at>playedAt){
           playedAt=cue.at;
-          pose.reset().setEffectiveWeight(1).play();
-          if(stand.isRunning())stand.crossFadeTo(pose,0.2,false);
+          pose=action(custom?live.current.pose:'Gesture_YA');pose.clampWhenFinished=true;
+          pose.reset().setLoop(THREE.LoopOnce,1).setEffectiveWeight(1).play();
+          if(stand!==pose&&stand.isRunning())stand.crossFadeTo(pose,0.2,false);
         }
-        eyes.forEach(eye=>eye.restore());
+        eyes.forEach(eye=>eye?.restore());
         if(arm&&waved)arm.quaternion.copy(animatedArm);
         animator.update(Math.max(0,(now-last)/1000));last=now;
         waved=clip==='Hello' && !!arm;
         if(arm&&waved){animatedArm.copy(arm.quaternion);arm.rotateZ(-0.72+0.24*Math.sin(now/160));}
-        eyes.forEach(eye=>eye.apply(live.current,now));
+        eyes.forEach(eye=>eye?.apply(live.current,now));
         renderer.render(scene,camera);raf=requestAnimationFrame(draw);
       }
       live.current.painter.current=ctx=>{
@@ -155,6 +151,6 @@ export default function Character(props:Props) {
       renderer.domElement.removeEventListener('webglcontextlost',fail);
       renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();
     };
-  },[]);
+  },[props.source]);
   return <div className="character" ref={mount} aria-hidden="true"/>;
 }

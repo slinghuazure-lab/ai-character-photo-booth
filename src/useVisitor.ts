@@ -10,7 +10,7 @@ import {composePhoto} from './photo';
 import {newPhotoRecord} from './photoRecord';
 import {writeRecord} from './photoHistoryStore';
 export type Observation=(boxes:FaceBox[],thumbs:Point[]|null,now:number)=>void;
-type Options={active:boolean;animations:AnimationSet;mirror:boolean;ready:boolean;request:ShotRequest;painter:CharacterPainter;
+type Options={assetKey:string;active:boolean;animations:AnimationSet;mirror:boolean;ready:boolean;request:ShotRequest;painter:CharacterPainter;
   observe:RefObject<Observation|null>;sound:()=>void;plate:ImageData|null};
 type View={phase:VisitorPhase;seconds:number;clip:Clip;separate:boolean;qr:string;link:string;photo:string;error:string};
 const initial:View={phase:'idle',seconds:0,clip:'Idle_03_Stand_Look',separate:false,qr:'',link:'',photo:'',error:''};
@@ -27,7 +27,7 @@ export function useVisitor(options:Options){
     let clip:Clip=live.current.animations.idle[idleSlot], segmenter:ImageSegmenter|undefined,pose:PoseLandmarker|undefined;
     let photo='',qr='',link='',error='',lastKey='';
     const publish=(now:number)=>{
-      const seconds=flow.phase==='countdown'?Math.max(1,Math.ceil((flow.deadline-now)/1000)):
+      const seconds=flow.phase==='hello'?flow.inviteSeconds:flow.phase==='countdown'?Math.max(1,Math.ceil((flow.deadline-now)/1000)):
         flow.phase==='qr'?Math.max(1,Math.ceil((qrUntil-now)/1000)):0;
       const key=[flow.phase,seconds,clip,flow.separate,qr,error].join('|');
       if(key!==lastKey && !ended){lastKey=key;setView({phase:flow.phase,seconds,clip,separate:flow.separate,qr,link,photo,error});}
@@ -125,6 +125,6 @@ export function useVisitor(options:Options){
       document.removeEventListener('visibilitychange',hide);options.observe.current=null;
       options.request.current=null;segmenter?.close();pose?.close();if(photo)URL.revokeObjectURL(photo);
     };
-  },[options.active,options.observe,options.request]);
+  },[options.active,options.observe,options.request,options.assetKey]);
   return {view,reset:()=>reset.current()};
 }
