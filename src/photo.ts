@@ -1,6 +1,6 @@
 import type {ImageSegmenter} from '@mediapipe/tasks-vision';
 
-import {exposureGamma,foregroundAlpha,referenceWeight,type FaceBox} from './matte';
+import {exposureGamma,foregroundAlpha,calibratedWeight,type FaceBox} from './matte';
 
 function surface(width:number,height:number){
   const canvas=document.createElement('canvas');
@@ -23,19 +23,35 @@ export async function composePhoto(frame:HTMLCanvasElement,faces:FaceBox[],mirro
     const rgba=matte.context.createImageData(mask.width,mask.height);
     const image=cutout.context.getImageData(0,0,frame.width,frame.height);
     const plate=reference?.width===frame.width && reference.height===frame.height?reference.data:null;
+    // Selfie Multiclass indices: background, hair, body skin, face skin, clothes, accessories.
+    const classes=plate?result.confidenceMasks.slice(1,5).map(m=>m.getAsFloat32Array()):null;
+    const changes=plate?new Uint8Array(frame.width*frame.height):null;
+    if(plate && changes){
+      for(let p=0;p<changes.length;p++){
+        const j=4*p;
+        changes[p]=Math.max(Math.abs(image.data[j]-plate[j]),Math.abs(image.data[j+1]-plate[j+1]),Math.abs(image.data[j+2]-plate[j+2]));
+      }
+    }
+    const radius=Math.max(4,Math.round(Math.min(frame.width,frame.height)*0.018));
+    const offsets=[-2,0,2];
     let foreground=false;
     for(let i=0;i<pixels.length;i++){
       let alpha=foregroundAlpha(pixels[i]);
-      if(plate && alpha){
+      if(changes && classes && alpha){
         const x=Math.floor(((i%mask.width)+0.5)*frame.width/mask.width);
         const y=Math.floor((Math.floor(i/mask.width)+0.5)*frame.height/mask.height);
         // Small patches also compare fabric texture, not just a single dark pixel.
         let distance=0;
-        for(const dy of [-2,0,2])for(const dx of [-2,0,2]){
-          const j=4*(Math.max(0,Math.min(frame.height-1,y+dy))*frame.width+Math.max(0,Math.min(frame.width-1,x+dx)));
-          distance+=Math.max(Math.abs(image.data[j]-plate[j]),Math.abs(image.data[j+1]-plate[j+1]),Math.abs(image.data[j+2]-plate[j+2]));
+        for(const dy of offsets)for(const dx of offsets){
+          const col=Math.max(0,Math.min(frame.width-1,x+dx));
+          const row=Math.max(0,Math.min(frame.height-1,y+dy));
+          distance+=changes[row*frame.width+col];
         }
-        alpha*=referenceWeight(distance/9);
+        const row=y*frame.width;
+        const nearby=(changes[row+Math.max(0,x-radius)]+changes[row+Math.min(frame.width-1,x+radius)]
+          +changes[Math.max(0,y-radius)*frame.width+x]+changes[Math.min(frame.height-1,y+radius)*frame.width+x])/4;
+        const anatomy=classes[0][i]+classes[1][i]+classes[2][i];
+        alpha*=calibratedWeight(distance/9,anatomy,classes[3][i],nearby);
       }
       rgba.data[4*i+3]=alpha;
       if(pixels[i]<0.5)foreground=true;
