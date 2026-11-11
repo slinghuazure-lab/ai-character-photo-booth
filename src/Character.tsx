@@ -2,14 +2,15 @@ import {useEffect,useRef,type RefObject} from 'react';
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {fileLoader,releaseModel} from './modelImport';
+import {loadOfficialOwl} from './loadOfficialOwl';
 import {eyeRotation,type Point} from './tracking';
 
 import type {CharacterPainter} from './PhotoPanel';
 import type {Clip} from './animationSettings';
 export type CharacterState='loading'|'ready'|'error'|'graphics';
 export type Cue='photo'|'left'|'right';
-type Props={composing:boolean;onPoseComplete:()=>void;source:string|null;idle:Clip;pose:Clip;clip?:Clip;photoSecond?:number;painter:CharacterPainter; gaze:RefObject<Point>; tracking:boolean; mirror:boolean; cue:{kind:Cue;at:number}; onState:(value:CharacterState)=>void};
-const modelUrl=import.meta.env.BASE_URL+'models/NTUB_Doctoral_Owl_v15R5_10_Actions.glb';
+type Props={onProgress:(percent:number|null)=>void;composing:boolean;onPoseComplete:()=>void;source:string|null;idle:Clip;pose:Clip;clip?:Clip;photoSecond?:number;painter:CharacterPainter; gaze:RefObject<Point>; tracking:boolean; mirror:boolean; cue:{kind:Cue;at:number}; onState:(value:CharacterState)=>void};
+
 
 function bindEye(root:THREE.Object3D,side:'left'|'right') {
   let joint:THREE.Bone|undefined, lid:THREE.Mesh|undefined;
@@ -46,6 +47,7 @@ export default function Character(props:Props) {
   const mount=useRef<HTMLDivElement>(null), live=useRef(props);
   useEffect(()=>{live.current=props;},[props]);
   useEffect(()=>{
+    const download=new AbortController();
     const host=mount.current!;
     let renderer:THREE.WebGLRenderer;
     try {renderer=new THREE.WebGLRenderer({alpha:true,antialias:true});}
@@ -79,31 +81,9 @@ export default function Character(props:Props) {
     async function load(){
       const custom=!!props.source;
       const loader=custom?fileLoader():new GLTFLoader();
-      async function loadBuiltin(){
-        if(typeof DecompressionStream!=='undefined'){
-          const abort=new AbortController();
-          const timeout=window.setTimeout(()=>abort.abort(),25000);
-          try{
-            const response=await fetch(modelUrl+'.gz',{signal:abort.signal});
-            if(!response.ok)throw Error('Model download: '+response.status);
-            const bytes=new Uint8Array(await response.arrayBuffer());
-            const buffer=bytes[0]===0x1f && bytes[1]===0x8b
-              ?await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer()
-              :bytes.buffer;
-            return await loader.parseAsync(buffer,'');
-          }catch(error){
-            if(disposed||failed)throw error;
-          }finally{window.clearTimeout(timeout);}
-        }
-        const abort=new AbortController();
-        const timeout=window.setTimeout(()=>abort.abort(),60000);
-        try{
-          const response=await fetch(modelUrl,{signal:abort.signal});
-          if(!response.ok)throw Error('Model download: '+response.status);
-          return await loader.parseAsync(await response.arrayBuffer(),'');
-        }finally{window.clearTimeout(timeout);}
-      }
-      const gltf=props.source?await loader.loadAsync(props.source):await loadBuiltin();
+      live.current.onProgress(null);
+      const gltf=props.source?await loader.loadAsync(props.source):await loader.parseAsync(
+        await loadOfficialOwl(download.signal,p=>{if(!disposed)live.current.onProgress(p);}), '');
       if(disposed||failed){releaseModel(gltf.scene);return;}
       model=gltf.scene;
       if(custom){
@@ -187,7 +167,7 @@ export default function Character(props:Props) {
     }
     void load().catch(error=>{console.error('V15 model',error);fail();});
     return ()=>{
-      live.current.painter.current=null;disposed=true;cancelAnimationFrame(raf);resize.disconnect();
+      live.current.painter.current=null;disposed=true;download.abort();cancelAnimationFrame(raf);resize.disconnect();
       mixer?.stopAllAction();
       if(model){mixer?.uncacheRoot(model);releaseModel(model);}
       renderer.domElement.removeEventListener('webglcontextlost',lost);

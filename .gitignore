@@ -7,3 +7,5 @@ public/wasm/
 .env.*.local
 
 public/models/*.glb.gz
+
+public/models/owl-v15r5-parts/
