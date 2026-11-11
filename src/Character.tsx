@@ -79,12 +79,31 @@ export default function Character(props:Props) {
     async function load(){
       const custom=!!props.source;
       const loader=custom?fileLoader():new GLTFLoader();
-      const gltf=await loader.loadAsync(props.source??modelUrl).catch(async error=>{
-        if(custom||disposed||failed)throw error;
-        await new Promise(resolve=>setTimeout(resolve,800));
-        if(disposed||failed)throw error;
-        return loader.loadAsync(modelUrl);
-      });
+      async function loadBuiltin(){
+        if(typeof DecompressionStream!=='undefined'){
+          const abort=new AbortController();
+          const timeout=window.setTimeout(()=>abort.abort(),25000);
+          try{
+            const response=await fetch(modelUrl+'.gz',{signal:abort.signal});
+            if(!response.ok)throw Error('Model download: '+response.status);
+            const bytes=new Uint8Array(await response.arrayBuffer());
+            const buffer=bytes[0]===0x1f && bytes[1]===0x8b
+              ?await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer()
+              :bytes.buffer;
+            return await loader.parseAsync(buffer,'');
+          }catch(error){
+            if(disposed||failed)throw error;
+          }finally{window.clearTimeout(timeout);}
+        }
+        const abort=new AbortController();
+        const timeout=window.setTimeout(()=>abort.abort(),60000);
+        try{
+          const response=await fetch(modelUrl,{signal:abort.signal});
+          if(!response.ok)throw Error('Model download: '+response.status);
+          return await loader.parseAsync(await response.arrayBuffer(),'');
+        }finally{window.clearTimeout(timeout);}
+      }
+      const gltf=props.source?await loader.loadAsync(props.source):await loadBuiltin();
       if(disposed||failed){releaseModel(gltf.scene);return;}
       model=gltf.scene;
       if(custom){

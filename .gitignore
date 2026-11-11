@@ -5,3 +5,5 @@ public/wasm/
 
 .env.local
 .env.*.local
+
+public/models/*.glb.gz
