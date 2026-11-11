@@ -29,3 +29,8 @@
 .stage-panel:fullscreen:has(.photo-panel) > .stage{min-height:40vh}
 
 .model-feedback{position:absolute;z-index:2;max-width:90%;padding:12px 20px;text-align:center;background:#172a40;color:white;border-radius:12px}
+
+.camera-off .empty-state{position:absolute;bottom:0;left:0;right:0;max-width:none;padding:8px 12px}
+.camera-off .empty-icon{display:none}
+.camera-off .empty-state h2{margin-bottom:2px}
+.camera-off .character{bottom:20%;height:76%}

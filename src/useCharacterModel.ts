@@ -2,6 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {builtinCatalog,loadAnimations,type AnimationSet,type ClipOption} from './animationSettings';
 import {readAsset,saveAsset,type SavedAsset} from './modelStorage';
 
+const builtinHash='8bb16597b84de722bc202d0e4a8d622ae4777c8e4ce4015cf4bda5622ac697c7';
 type ActiveModel={source:string|null;name:string;key:string;catalog:ClipOption[];slots:AnimationSet};
 function builtin():ActiveModel{
   return {source:null,name:'NTUB V15R5 · 10 Actions',key:'ntub-visitor-animations-v1',catalog:builtinCatalog,slots:loadAnimations()};
@@ -19,7 +20,7 @@ export function useCharacterModel(){
   const generation=useRef(0);
   useEffect(()=>{
     const token=++generation.current;
-    void readAsset().then(asset=>{if(asset&&token===generation.current)setModel(imported(asset));}).catch(()=>{});
+    void readAsset().then(asset=>{if(asset&&asset.hash!==builtinHash&&token===generation.current)setModel(imported(asset));}).catch(()=>{});
     return ()=>{generation.current++;};
   },[]);
   useEffect(()=>()=>{if(model.source)URL.revokeObjectURL(model.source);},[model.source]);
@@ -30,13 +31,15 @@ export function useCharacterModel(){
     try{
       let next:SavedAsset|null=null;
       if(file){
-        const {inspectGlb}=await import('./modelImport');
         const bytes=await file.arrayBuffer();
-        const names=await inspectGlb(bytes);
-        if(!names.length){setError('none');return;}
         const digest=await crypto.subtle.digest('SHA-256',bytes);
         const hash=Array.from(new Uint8Array(digest),v=>v.toString(16).padStart(2,'0')).join('');
-        next={file,name:file.name,hash,names};
+        if(hash!==builtinHash){
+          const {inspectGlb}=await import('./modelImport');
+          const names=await inspectGlb(bytes);
+          if(!names.length){setError('none');return;}
+          next={file,name:file.name,hash,names};
+        }
       }
       if(token!==generation.current)return;
       try{await saveAsset(next);}catch{setError('store');return;}
