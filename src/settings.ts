@@ -9,7 +9,7 @@ export function loadSettings():ExhibitSettings {
 export function validateSettings(value:unknown):ExhibitSettings|null {
   if(!value||typeof value!=='object')return null;
   const x=value as Record<string,unknown>;
-  if(x.schemaVersion!==1||!['zh-TW','en','ja'].includes(String(x.language))||!['auto','640','1280','1920'].includes(String(x.resolution))||typeof x.deviceId!=='string'||typeof x.mirror!=='boolean'||typeof x.showDebug!=='boolean')return null;
+  if(x.schemaVersion!==1||!['zh-TW','en','ja','ko','th'].includes(String(x.language))||!['auto','640','1280','1920'].includes(String(x.resolution))||typeof x.deviceId!=='string'||typeof x.mirror!=='boolean'||typeof x.showDebug!=='boolean')return null;
   return {schemaVersion:1,language:x.language as Language,deviceId:x.deviceId,resolution:x.resolution as Resolution,mirror:x.mirror,showDebug:x.showDebug};
 }
 export function saveSettings(value:ExhibitSettings):void {try{localStorage.setItem(KEY,JSON.stringify(value));}catch{/* Storage may be disabled. */}}

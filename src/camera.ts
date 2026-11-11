@@ -7,7 +7,7 @@ export function cameraSupported():boolean { return !!navigator.mediaDevices?.get
 export async function listCameras():Promise<CameraDevice[]> {
   if (!navigator.mediaDevices?.enumerateDevices) return [];
   const devices = await navigator.mediaDevices.enumerateDevices();
-  return devices.filter(d=>d.kind==='videoinput').map((d,i)=>({deviceId:d.deviceId,label:d.label || `Camera ${i+1}`}));
+  return devices.filter(d=>d.kind==='videoinput').map(d=>({deviceId:d.deviceId,label:d.label}));
 }
 export async function startCamera(settings:CameraSettings):Promise<MediaStream> {
   const desired = settings.resolution==='auto' ? {width:{ideal:1280},height:{ideal:720}} : {width:{ideal:sizes[settings.resolution][0]},height:{ideal:sizes[settings.resolution][1]}};

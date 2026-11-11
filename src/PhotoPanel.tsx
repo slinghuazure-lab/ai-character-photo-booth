@@ -12,12 +12,44 @@ export type ShotRequest=RefObject<((frame:HTMLCanvasElement|null,faces:FaceBox[]
 export type CharacterPainter=RefObject<((ctx:CanvasRenderingContext2D)=>void)|null>;
 const words={
  'zh-TW':['拍攝合照','準備去背模型…','合成中…','合成失敗，請重試','重新載入去背模型','下載 PNG','合照預覽','無法取得攝影機畫面，請再試一次','記錄空景（選用）','請離開畫面並保持椅子不動','清除空景','取消記錄'],
- en:['Take group photo','Loading segmentation…','Composing…','Could not compose photo. Try again.','Reload segmentation model','Download PNG','Photo preview','Camera frame unavailable. Please retry.','Record empty scene (optional)','Step out and keep the chair still','Clear reference','Cancel recording'],
+ ko:["합성 사진 촬영", "배경 제거 모델 준비 중…", "사진 합성 중…", "사진을 합성할 수 없습니다. 다시 시도하세요.", "배경 제거 모델 다시 불러오기", "PNG 다운로드", "사진 미리보기", "카메라 영상을 가져올 수 없습니다. 다시 시도하세요.", "빈 배경 기록 (선택)", "화면 밖으로 이동하고 의자는 그대로 두세요", "기준 배경 지우기", "기록 취소"],
+  th:["ถ่ายภาพร่วมกับตัวละคร", "กำลังโหลดโมเดลตัดพื้นหลัง…", "กำลังรวมภาพ…", "รวมภาพไม่ได้ โปรดลองอีกครั้ง", "โหลดโมเดลตัดพื้นหลังใหม่", "ดาวน์โหลด PNG", "ตัวอย่างภาพถ่าย", "ไม่พบภาพจากกล้อง โปรดลองอีกครั้ง", "บันทึกฉากว่าง (ไม่บังคับ)", "ออกจากภาพโดยไม่ขยับเก้าอี้", "ล้างภาพอ้างอิง", "ยกเลิกการบันทึก"],
+  en:['Take group photo','Loading segmentation…','Composing…','Could not compose photo. Try again.','Reload segmentation model','Download PNG','Photo preview','Camera frame unavailable. Please retry.','Record empty scene (optional)','Step out and keep the chair still','Clear reference','Cancel recording'],
  ja:['合成写真を撮る','背景除去モデルを読み込み中…','合成中…','合成に失敗しました。再試行してください','モデルを再読み込み','PNGをダウンロード','写真プレビュー','映像を取得できません。もう一度お試しください','無人の背景を記録（任意）','椅子を動かさず画面から離れてください','背景記録を消去','記録をキャンセル']
 };
 const staffCopy={
  'zh-TW':{waiting:'請站到拍攝位置，面向鏡頭',checking:'正在檢查臉部光線…',ok:'臉部光線可用',dark:'臉部持續偏暗，請增加正面柔光或靠近光源',backlit:'臉部逆光，請轉向光源或將亮窗移出身後',trial:'設定拍攝環境',again:'重新設定場地',saved:'此裝置已完成場地設定',cancel:'取消設定',guide:'站在訪客位置，比讚 1 秒後試拍。查看眼睛、兩側臉頰與衣領邊緣。',take:'拍一張試拍照',done:'確認試拍並完成設定',review:'試拍預覽：檢查臉部明暗與去背邊緣，可調整光源後再試拍。'},
- en:{waiting:'Stand at the photo position and face the camera',checking:'Checking face lighting…',ok:'Face lighting looks usable',dark:'Face remains dark. Add soft front light or move closer to a light.',backlit:'Backlit face. Turn toward the light or move the bright window out of the background.',trial:'Set up venue',again:'Set up a new venue',saved:'Venue setup completed on this device',cancel:'Cancel setup',guide:'Stand in the visitor spot and give a thumbs-up for one second. Check eyes, cheeks and collar edges.',take:'Take test shot',done:'Accept test and finish setup',review:'Test preview: inspect lighting and cutout edges. Adjust and retake as needed.'},
+ ko:{
+    waiting:"촬영 위치에서 카메라를 바라보세요",
+    checking:"얼굴 조명 확인 중…",
+    ok:"얼굴 조명이 적절합니다",
+    dark:"얼굴이 계속 어둡습니다. 앞쪽에 부드러운 조명을 추가하거나 빛에 더 가까이 서 주세요.",
+    backlit:"얼굴에 역광이 비칩니다. 빛을 향해 서거나 밝은 창문을 등지지 않도록 해 주세요.",
+    trial:"촬영 환경 설정",
+    again:"새 촬영 환경 설정",
+    saved:"이 기기의 촬영 환경 설정 완료",
+    cancel:"설정 취소",
+    guide:"촬영 위치에서 엄지를 1초간 들어 주세요. 눈과 볼, 옷깃의 윤곽을 확인하세요.",
+    take:"시험 촬영",
+    done:"시험 사진 확인 및 설정 완료",
+    review:"시험 사진에서 밝기와 배경 제거 상태를 확인하세요. 필요하면 조명을 조절하고 다시 촬영하세요."
+  },
+  th:{
+    waiting:"ยืนที่จุดถ่ายภาพแล้วมองกล้อง",
+    checking:"กำลังตรวจแสงบนใบหน้า…",
+    ok:"แสงบนใบหน้าเหมาะสม",
+    dark:"ใบหน้ายังมืดอยู่ เพิ่มแสงนุ่ม ๆ จากด้านหน้าหรือขยับเข้าใกล้แสง",
+    backlit:"ใบหน้าย้อนแสง หันเข้าหาแสงหรือหลีกเลี่ยงหน้าต่างสว่างด้านหลัง",
+    trial:"ตั้งค่าสถานที่ถ่ายภาพ",
+    again:"ตั้งค่าสถานที่ใหม่",
+    saved:"ตั้งค่าสถานที่บนเครื่องนี้แล้ว",
+    cancel:"ยกเลิกการตั้งค่า",
+    guide:"ยืนที่จุดถ่ายภาพแล้วชูนิ้วโป้ง 1 วินาที ตรวจดูขอบตา แก้ม และปกเสื้อ",
+    take:"ทดลองถ่ายภาพ",
+    done:"ยืนยันภาพทดลองและเสร็จสิ้นการตั้งค่า",
+    review:"ตรวจแสงบนใบหน้าและขอบที่ตัดพื้นหลังในภาพทดลอง ปรับแสงแล้วถ่ายใหม่ได้"
+  },
+  en:{waiting:'Stand at the photo position and face the camera',checking:'Checking face lighting…',ok:'Face lighting looks usable',dark:'Face remains dark. Add soft front light or move closer to a light.',backlit:'Backlit face. Turn toward the light or move the bright window out of the background.',trial:'Set up venue',again:'Set up a new venue',saved:'Venue setup completed on this device',cancel:'Cancel setup',guide:'Stand in the visitor spot and give a thumbs-up for one second. Check eyes, cheeks and collar edges.',take:'Take test shot',done:'Accept test and finish setup',review:'Test preview: inspect lighting and cutout edges. Adjust and retake as needed.'},
  ja:{waiting:'撮影位置でカメラに顔を向けてください',checking:'顔の明るさを確認中…',ok:'顔の明るさは良好です',dark:'顔が暗い状態です。正面から柔らかい光を足してください',backlit:'逆光です。光の方を向くか、明るい窓を背にしない位置に移動してください',trial:'会場を設定',again:'会場を再設定',saved:'この端末の会場設定は完了しました',cancel:'設定をキャンセル',guide:'撮影位置で親指を1秒間立ててください。目、両頬、襟の輪郭を確認します。',take:'テスト写真を撮る',done:'写真を確認して設定完了',review:'テスト写真で顔の明るさと輪郭を確認し、照明を調整して再撮影できます。'}
 };
 export default function PhotoPanel({plate,setPlate,gestureShot,lighting,language,ready,request,painter,mirror,video,empty}:{
@@ -44,7 +76,9 @@ export default function PhotoPanel({plate,setPlate,gestureShot,lighting,language
   const deadline=useRef<number|null>(null),lastGesture=useRef(gestureShot);
   const shutterCopy={
     'zh-TW':['按拍攝或任一人比讚 1 秒，倒數 3 秒後拍攝','拍攝倒數','取消倒數'],
-    en:['Press capture or hold one thumbs-up for 1 second to start a 3-second countdown','Taking photo in','Cancel countdown'],
+    ko:["촬영을 누르거나 한 사람이 엄지를 1초간 들면 3초 후 촬영합니다", "촬영까지", "카운트다운 취소"],
+  th:["กดถ่ายภาพหรือให้หนึ่งคนชูนิ้วโป้งค้างไว้ 1 วินาที เพื่อเริ่มนับถอยหลัง 3 วินาที", "นับถอยหลังถ่ายภาพ", "ยกเลิกการนับถอยหลัง"],
+  en:['Press capture or hold one thumbs-up for 1 second to start a 3-second countdown','Taking photo in','Cancel countdown'],
     ja:['撮影ボタンまたは1人が親指を1秒立てると、3秒後に撮影します','撮影まで','カウントを中止']
   }[language];
 

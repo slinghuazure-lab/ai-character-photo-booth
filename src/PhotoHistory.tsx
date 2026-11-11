@@ -5,7 +5,43 @@ import {readRecords,retryRecords,historyChanged as changed} from './photoHistory
 import {demoSharing,sharingConfigured} from './shareConfig';
 const labels={
  'zh-TW':{title:'本機拍照紀錄',empty:'尚無正式合照紀錄',time:'拍攝時間',people:'人數',status:'分享狀態',local:'未分享',shared:'已產生分享連結',failed:'分享失敗',error:'本機紀錄無法讀取或寫入',demo:'僅模擬',count:'筆',cloud:'雲端',pending:'待同步',synced:'已同步',retry:'重試同步',download:'下載'},
- en:{title:'Local photo history',empty:'No group photos yet',time:'Capture time',people:'People',status:'Sharing',local:'Not shared',shared:'Share link created',failed:'Sharing failed',error:'Local history could not be read or saved',demo:'Demo only',count:'records',cloud:'Cloud',pending:'Pending',synced:'Synced',retry:'Retry sync',download:'Download'},
+ ko:{
+    title:"이 기기의 촬영 기록",
+    empty:"아직 촬영 기록이 없습니다",
+    time:"촬영 시각",
+    people:"인원",
+    status:"공유 상태",
+    local:"공유 전",
+    shared:"공유 링크 생성 완료",
+    failed:"공유 실패",
+    error:"기록을 읽거나 저장할 수 없습니다",
+    demo:"모의 테스트",
+    count:"건",
+    cloud:"클라우드",
+    pending:"동기화 대기",
+    synced:"동기화 완료",
+    retry:"동기화 재시도",
+    download:"다운로드"
+  },
+  th:{
+    title:"ประวัติการถ่ายภาพบนเครื่องนี้",
+    empty:"ยังไม่มีประวัติการถ่ายภาพ",
+    time:"เวลาถ่าย",
+    people:"จำนวนคน",
+    status:"สถานะการแชร์",
+    local:"ยังไม่ได้แชร์",
+    shared:"สร้างลิงก์แชร์แล้ว",
+    failed:"แชร์ไม่สำเร็จ",
+    error:"อ่านหรือบันทึกประวัติบนเครื่องไม่ได้",
+    demo:"โหมดจำลอง",
+    count:"รายการ",
+    cloud:"คลาวด์",
+    pending:"รอซิงค์",
+    synced:"ซิงค์แล้ว",
+    retry:"ลองซิงค์อีกครั้ง",
+    download:"ดาวน์โหลด"
+  },
+  en:{title:'Local photo history',empty:'No group photos yet',time:'Capture time',people:'People',status:'Sharing',local:'Not shared',shared:'Share link created',failed:'Sharing failed',error:'Local history could not be read or saved',demo:'Demo only',count:'records',cloud:'Cloud',pending:'Pending',synced:'Synced',retry:'Retry sync',download:'Download'},
  ja:{title:'端末の撮影履歴',empty:'撮影履歴はありません',time:'撮影日時',people:'人数',status:'共有状況',local:'未共有',shared:'共有リンク作成済み',failed:'共有失敗',error:'履歴を読み込みまたは保存できません',demo:'テストのみ',count:'件',cloud:'クラウド',pending:'同期待ち',synced:'同期済み',retry:'再同期',download:'ダウンロード'}
 };
 export default function PhotoHistory({language}:{language:Language}){

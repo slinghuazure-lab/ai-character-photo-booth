@@ -17,10 +17,14 @@ export function loadAnimations(key='ntub-visitor-animations-v1',catalog=builtinC
     if([a.idle,a.photo].every(group=>Array.isArray(group)&&group.length===3&&group.every(c=>catalog.some(o=>o.id===c)))&&catalog.some(o=>o.id===a.hello))return a;
   }catch{/* Use authored defaults. */}return fallback;
 }
-const names={'zh-TW':['閱讀踢腳','思考','站立張望','揮手問好','跳舞','比愛心','比 YA','臉旁愛心','致謝','比讚'],en:['Reading','Thinking','Standing','Hello wave','Dance','Heart','Peace','Face heart','Thank you','Thumbs up'],ja:['読書','考える','見回す','手を振る','ダンス','ハート','ピース','顔の横でハート','感謝','サムズアップ']};
+const names={'zh-TW':['閱讀踢腳','思考','站立張望','揮手問好','跳舞','比愛心','比 YA','臉旁愛心','致謝','比讚'],ko:["책 읽기", "생각하기", "둘러보기", "손 흔들어 인사", "춤추기", "하트", "브이", "볼 하트", "감사 인사", "엄지 척"],
+  th:["อ่านหนังสือ", "ครุ่นคิด", "ยืนมองรอบ ๆ", "โบกมือทักทาย", "เต้น", "ทำมือรูปหัวใจ", "ชูสองนิ้ว", "ทำหัวใจข้างแก้ม", "ขอบคุณ", "ชูนิ้วโป้ง"],
+  en:['Reading','Thinking','Standing','Hello wave','Dance','Heart','Peace','Face heart','Thank you','Thumbs up'],ja:['読書','考える','見回す','手を振る','ダンス','ハート','ピース','顔の横でハート','感謝','サムズアップ']};
 type Props={value:AnimationSet;onChange:(v:AnimationSet)=>void;language:Language;catalog:ClipOption[];name:string;custom:boolean;busy:boolean;error:'invalid'|'none'|'store'|null;choose:(f:File|null)=>void};
 export function AnimationSettings({value,onChange,language,catalog,name,custom,busy,error,choose}:Props){
- const t={'zh-TW':['角色動畫設定','待機','問好','拍照','匯入 GLB 角色','還原內建小菁鷹','正在讀取模型…','請選擇含內嵌資源、可載入的 GLB 2.0 檔案。','這個模型沒有動畫片段。','無法儲存角色設定，請檢查瀏覽器儲存空間。'],en:['Character animations','Idle','Hello','Photo','Import GLB character','Restore built-in owl','Loading model…','Choose a supported self-contained GLB 2.0 file.','This model has no animation clips.','Unable to save model settings. Check browser storage.'],ja:['キャラクター設定','待機','挨拶','撮影','GLBを読み込む','標準キャラクターに戻す','読込中…','内蔵素材のGLB 2.0を選んでください。','アニメーションがありません。','ブラウザ保存容量を確認してください。']}[language];
+ const t={'zh-TW':['角色動畫設定','待機','問好','拍照','匯入 GLB 角色','還原內建小菁鷹','正在讀取模型…','請選擇含內嵌資源、可載入的 GLB 2.0 檔案。','這個模型沒有動畫片段。','無法儲存角色設定，請檢查瀏覽器儲存空間。'],ko:["캐릭터 애니메이션 설정", "대기", "인사", "촬영", "GLB 캐릭터 가져오기", "기본 부엉이로 복원", "모델 불러오는 중…", "리소스가 포함된 GLB 2.0 파일을 선택해 주세요.", "이 모델에는 애니메이션이 없습니다.", "캐릭터 설정을 저장할 수 없습니다. 브라우저 저장 공간을 확인하세요."],
+  th:["ตั้งค่าแอนิเมชันตัวละคร", "สแตนด์บาย", "ทักทาย", "ถ่ายภาพ", "นำเข้าตัวละคร GLB", "คืนค่าตัวละครนกฮูกเริ่มต้น", "กำลังโหลดโมเดล…", "โปรดเลือกไฟล์ GLB 2.0 ที่มีทรัพยากรฝังอยู่ในไฟล์", "โมเดลนี้ไม่มีคลิปแอนิเมชัน", "บันทึกการตั้งค่าตัวละครไม่ได้ โปรดตรวจสอบพื้นที่เก็บข้อมูลของเบราว์เซอร์"],
+  en:['Character animations','Idle','Hello','Photo','Import GLB character','Restore built-in owl','Loading model…','Choose a supported self-contained GLB 2.0 file.','This model has no animation clips.','Unable to save model settings. Check browser storage.'],ja:['キャラクター設定','待機','挨拶','撮影','GLBを読み込む','標準キャラクターに戻す','読込中…','内蔵素材のGLB 2.0を選んでください。','アニメーションがありません。','ブラウザ保存容量を確認してください。']}[language];
  return <details className="panel"><summary>{t[0]}</summary>
    <p>{name}</p><label>{t[4]}<input type="file" accept=".glb,model/gltf-binary" disabled={busy} onChange={e=>{
      const f=e.target.files?.[0];e.target.value='';if(f)choose(f);
