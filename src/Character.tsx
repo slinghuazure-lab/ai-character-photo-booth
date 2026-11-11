@@ -6,8 +6,9 @@ import {eyeRotation,type Point} from './tracking';
 
 import type {CharacterPainter} from './PhotoPanel';
 import type {Clip} from './animationSettings';
+export type CharacterState='loading'|'ready'|'error'|'graphics';
 export type Cue='photo'|'left'|'right';
-type Props={composing:boolean;onPoseComplete:()=>void;source:string|null;idle:Clip;pose:Clip;clip?:Clip;photoSecond?:number;painter:CharacterPainter; gaze:RefObject<Point>; tracking:boolean; mirror:boolean; cue:{kind:Cue;at:number}; onState:(value:'ready'|'error')=>void};
+type Props={composing:boolean;onPoseComplete:()=>void;source:string|null;idle:Clip;pose:Clip;clip?:Clip;photoSecond?:number;painter:CharacterPainter; gaze:RefObject<Point>; tracking:boolean; mirror:boolean; cue:{kind:Cue;at:number}; onState:(value:CharacterState)=>void};
 const modelUrl=import.meta.env.BASE_URL+'models/NTUB_Doctoral_Owl_v15R5_10_Actions.glb';
 
 function bindEye(root:THREE.Object3D,side:'left'|'right') {
@@ -48,7 +49,7 @@ export default function Character(props:Props) {
     const host=mount.current!;
     let renderer:THREE.WebGLRenderer;
     try {renderer=new THREE.WebGLRenderer({alpha:true,antialias:true});}
-    catch {live.current.onState('error');return;}
+    catch {live.current.onState('graphics');return;}
     renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
     host.appendChild(renderer.domElement);
     const scene=new THREE.Scene();
@@ -73,10 +74,17 @@ export default function Character(props:Props) {
       if(disposed)return;
       failed=true;cancelAnimationFrame(raf);live.current.onState('error');
     };
-    renderer.domElement.addEventListener('webglcontextlost',fail);
+    const lost=()=>{fail();if(!disposed)live.current.onState('graphics');};
+    renderer.domElement.addEventListener('webglcontextlost',lost);
     async function load(){
       const custom=!!props.source;
-      const gltf=custom?await fileLoader().loadAsync(props.source!):await new GLTFLoader().loadAsync(modelUrl);
+      const loader=custom?fileLoader():new GLTFLoader();
+      const gltf=await loader.loadAsync(props.source??modelUrl).catch(async error=>{
+        if(custom||disposed||failed)throw error;
+        await new Promise(resolve=>setTimeout(resolve,800));
+        if(disposed||failed)throw error;
+        return loader.loadAsync(modelUrl);
+      });
       if(disposed||failed){releaseModel(gltf.scene);return;}
       model=gltf.scene;
       if(custom){
@@ -163,7 +171,7 @@ export default function Character(props:Props) {
       live.current.painter.current=null;disposed=true;cancelAnimationFrame(raf);resize.disconnect();
       mixer?.stopAllAction();
       if(model){mixer?.uncacheRoot(model);releaseModel(model);}
-      renderer.domElement.removeEventListener('webglcontextlost',fail);
+      renderer.domElement.removeEventListener('webglcontextlost',lost);
       renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();
     };
   },[props.source]);
